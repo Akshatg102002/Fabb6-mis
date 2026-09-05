@@ -1,0 +1,113 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Brand palette */
+  --brand-primary: #0B4F9C;
+  --brand-primary-dark: #073A75;
+  --brand-accent: #F26522;
+
+  /* Surfaces */
+  --surface: #FFFFFF;
+  --surface-sunken: #F5F7FA;
+  --surface-raised: #FFFFFF;
+
+  /* Borders */
+  --border: #D8DEE7;
+
+  /* Text */
+  --text: #14213D;
+  --text-muted: #5A6884;
+
+  /* Scan outcome colours */
+  --scan-ok: #0E8A4F;
+  --scan-warn: #C77700;
+  --scan-error: #C42B1C;
+
+  /* Derived transparencies */
+  --scan-ok-bg: #E8F7F0;
+  --scan-warn-bg: #FFF7E6;
+  --scan-error-bg: #FDECEA;
+
+  /* Spacing helpers for touch targets */
+  --touch-min: 56px;
+
+  /* Transition */
+  --transition-fast: 80ms ease;
+}
+
+/* ── Base reset ── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: 'IBM Plex Sans', Inter, system-ui, -apple-system, sans-serif;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  background-color: var(--surface-sunken);
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1.5;
+  overscroll-behavior: none;
+}
+
+/* ── Utility: tabular-nums for quantities ── */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* ── Focus ring ── */
+:focus-visible {
+  outline: 3px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
+/* ── Floor screen base typography ── */
+.floor-text {
+  font-size: clamp(1.25rem, 3vw, 2rem);
+  line-height: 1.4;
+}
+
+/* ── Scan outcome panels ── */
+.scan-ok-panel {
+  background-color: var(--scan-ok-bg);
+  color: var(--scan-ok);
+  border-color: var(--scan-ok);
+}
+
+.scan-warn-panel {
+  background-color: var(--scan-warn-bg);
+  color: var(--scan-warn);
+  border-color: var(--scan-warn);
+}
+
+.scan-error-panel {
+  background-color: var(--scan-error-bg);
+  color: var(--scan-error);
+  border-color: var(--scan-error);
+}
+
+/* ── Prevent iOS bounce on scroll containers ── */
+.scroll-container {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Safe area insets for notched devices ── */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
