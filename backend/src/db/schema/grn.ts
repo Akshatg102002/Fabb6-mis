@@ -8,10 +8,10 @@ import {
   integer,
   numeric,
 } from 'drizzle-orm/pg-core';
-import { skus, suppliers } from './catalogue.ts';
-import { sites } from './locations.ts';
-import { batches } from './inventory.ts';
-import { users } from './auth.ts';
+import { skus, suppliers } from './catalogue.js';
+import { sites } from './locations.js';
+import { batches } from './inventory.js';
+import { users } from './auth.js';
 
 export const poStatusEnum = pgEnum('po_status', [
   'draft',

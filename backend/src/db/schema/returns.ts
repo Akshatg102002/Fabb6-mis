@@ -7,9 +7,9 @@ import {
   pgEnum,
   integer,
 } from 'drizzle-orm/pg-core';
-import { skus } from './catalogue.ts';
-import { batches } from './inventory.ts';
-import { users } from './auth.ts';
+import { skus } from './catalogue.js';
+import { batches } from './inventory.js';
+import { users } from './auth.js';
 
 export const returnTypeEnum = pgEnum('return_type', ['customer_return', 'rto']);
 

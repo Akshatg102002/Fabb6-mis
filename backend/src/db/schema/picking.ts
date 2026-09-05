@@ -7,10 +7,10 @@ import {
   pgEnum,
   integer,
 } from 'drizzle-orm/pg-core';
-import { skus } from './catalogue.ts';
-import { sites, locations } from './locations.ts';
-import { batches } from './inventory.ts';
-import { users } from './auth.ts';
+import { skus } from './catalogue.js';
+import { sites, locations } from './locations.js';
+import { batches } from './inventory.js';
+import { users } from './auth.js';
 
 export const pickListStatusEnum = pgEnum('pick_list_status', [
   'pending',
