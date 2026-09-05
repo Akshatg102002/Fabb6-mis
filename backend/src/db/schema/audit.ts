@@ -7,7 +7,7 @@ import {
   bigint,
   index,
 } from 'drizzle-orm/pg-core';
-import { users } from './auth.js';
+import { users } from './auth.ts';
 
 export const auditLog = pgTable(
   'audit_log',

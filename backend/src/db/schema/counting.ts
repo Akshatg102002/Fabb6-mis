@@ -7,10 +7,10 @@ import {
   integer,
   numeric,
 } from 'drizzle-orm/pg-core';
-import { skus } from './catalogue.js';
-import { sites, locations } from './locations.js';
-import { batches } from './inventory.js';
-import { users } from './auth.js';
+import { skus } from './catalogue.ts';
+import { sites, locations } from './locations.ts';
+import { batches } from './inventory.ts';
+import { users } from './auth.ts';
 
 export const cycleCountStatusEnum = pgEnum('cycle_count_status', [
   'scheduled',

@@ -8,7 +8,7 @@ import {
   pgEnum,
   integer,
 } from 'drizzle-orm/pg-core';
-import { sites } from './locations.js';
+import { sites } from './locations.ts';
 
 export const roleEnum = pgEnum('user_role', [
   'picker',

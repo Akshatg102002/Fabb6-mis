@@ -9,9 +9,9 @@ import {
   bigint,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
-import { skus } from './catalogue.js';
-import { locations } from './locations.js';
-import { users } from './auth.js';
+import { skus } from './catalogue.ts';
+import { locations } from './locations.ts';
+import { users } from './auth.ts';
 
 export const movementTypeEnum = pgEnum('movement_type', [
   'grn_receipt',
