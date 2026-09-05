@@ -46,7 +46,7 @@ async function auditRequest(
       try {
         entityId = options.getEntityId(req, body);
       } catch {
-        entityId = req.params['id'] ?? 'unknown';
+        entityId = (req.params['id'] as string | undefined) ?? 'unknown';
       }
 
       db.insert(auditLog)

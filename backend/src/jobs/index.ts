@@ -35,26 +35,26 @@ export async function startJobQueue(): Promise<PgBoss> {
   logger.info('pg-boss job queue started');
 
   // Register handlers
-  await boss.work(JOB_NAMES.SHOPIFY_SYNC, { teamSize: 1, teamConcurrency: 1 }, async (job) => {
-    logger.info({ jobId: job.id }, 'Running shopify-sync job');
+  await boss.work(JOB_NAMES.SHOPIFY_SYNC, { batchSize: 1 }, async (jobs) => {
+    logger.info({ jobId: jobs[0]?.id }, 'Running shopify-sync job');
     await runShopifySyncJob();
   });
 
-  await boss.work(JOB_NAMES.EXPIRY_ALERTS, { teamSize: 1, teamConcurrency: 1 }, async (job) => {
-    logger.info({ jobId: job.id }, 'Running expiry-alerts job');
+  await boss.work(JOB_NAMES.EXPIRY_ALERTS, { batchSize: 1 }, async (jobs) => {
+    logger.info({ jobId: jobs[0]?.id }, 'Running expiry-alerts job');
     await runExpiryAlertsJob();
   });
 
-  await boss.work(JOB_NAMES.REORDER_CALC, { teamSize: 1, teamConcurrency: 1 }, async (job) => {
-    logger.info({ jobId: job.id }, 'Running reorder-calc job');
+  await boss.work(JOB_NAMES.REORDER_CALC, { batchSize: 1 }, async (jobs) => {
+    logger.info({ jobId: jobs[0]?.id }, 'Running reorder-calc job');
     await runReorderCalcJob();
   });
 
   await boss.work(
     JOB_NAMES.IDEMPOTENCY_CLEANUP,
-    { teamSize: 1, teamConcurrency: 1 },
-    async (job) => {
-      logger.info({ jobId: job.id }, 'Running idempotency-cleanup job');
+    { batchSize: 1 },
+    async (jobs) => {
+      logger.info({ jobId: jobs[0]?.id }, 'Running idempotency-cleanup job');
       await cleanupExpiredIdempotencyKeys();
     },
   );

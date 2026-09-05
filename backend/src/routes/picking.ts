@@ -19,7 +19,7 @@ router.get(
   requireAuth,
   validate({ query: pickQuerySchema }),
   async (req, res) => {
-    const q = req.query as {
+    const q = req.query as unknown as {
       page: number;
       limit: number;
       site_id?: string;
@@ -30,7 +30,7 @@ router.get(
     const conditions = [];
     if (q.site_id) conditions.push(eq(pickLists.site_id, q.site_id));
     if (q.status)
-      conditions.push(eq(pickLists.status, q.status as typeof pickLists.status.column._.data));
+      conditions.push(eq(pickLists.status, q.status as (typeof pickLists.status.enumValues)[number]));
     if (q.assigned_to) conditions.push(eq(pickLists.assigned_to, q.assigned_to));
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
@@ -62,7 +62,7 @@ router.get(
   validate({ params: z.object({ id: z.string().uuid() }) }),
   async (req, res) => {
     const pickList = await db.query.pickLists.findFirst({
-      where: eq(pickLists.id, req.params['id']!),
+      where: eq(pickLists.id, req.params['id'] as string),
     });
     if (!pickList) {
       res.status(404).json({ error: 'Pick list not found' });
@@ -82,7 +82,7 @@ router.post(
   async (req, res) => {
     const body = req.body as {
       site_id: string;
-      channel: typeof pickLists.channel.column._.data;
+      channel: (typeof pickLists.channel.enumValues)[number];
       priority: number;
       notes?: string;
       lines: {
@@ -268,7 +268,7 @@ router.post(
     );
     const { total, picked } = summary.rows[0] ?? { total: 0, picked: 0 };
 
-    let newStatus: typeof pickLists.status.column._.data = 'in_progress';
+    let newStatus: (typeof pickLists.status.enumValues)[number] = 'in_progress';
     if (Number(picked) >= Number(total)) {
       newStatus = 'picked';
     } else if (Number(picked) > 0) {

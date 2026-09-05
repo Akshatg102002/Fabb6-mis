@@ -58,7 +58,7 @@ router.get(
   requireAuth,
   validate({ query: adjustmentQuerySchema }),
   async (req, res) => {
-    const q = req.query as {
+    const q = req.query as unknown as {
       page: number;
       limit: number;
       sku_id?: string;
@@ -72,7 +72,7 @@ router.get(
     if (q.location_id) conditions.push(eq(adjustments.location_id, q.location_id));
     if (q.status)
       conditions.push(
-        eq(adjustments.status, q.status as typeof adjustments.status.column._.data),
+        eq(adjustments.status, q.status as (typeof adjustments.status.enumValues)[number]),
       );
 
     // If site_id filter needed, join to locations

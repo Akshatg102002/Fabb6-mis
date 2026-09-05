@@ -40,7 +40,7 @@ router.get(
   requireAuth,
   validate({ query: transferQuerySchema }),
   async (req, res) => {
-    const q = req.query as {
+    const q = req.query as unknown as {
       page: number;
       limit: number;
       from_site_id?: string;
@@ -192,7 +192,7 @@ router.post(
     }),
   }),
   async (req, res) => {
-    const transferId = req.params['id']!;
+    const transferId = req.params['id'] as string;
     const body = req.body as {
       lines: {
         sku_id: string;

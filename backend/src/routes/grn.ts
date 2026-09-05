@@ -41,7 +41,7 @@ router.get(
     }),
   }),
   async (req, res) => {
-    const q = req.query as {
+    const q = req.query as unknown as {
       page: number;
       limit: number;
       supplier_id?: string;
@@ -54,7 +54,7 @@ router.get(
     if (q.site_id) conditions.push(eq(purchaseOrders.site_id, q.site_id));
     if (q.status)
       conditions.push(
-        eq(purchaseOrders.status, q.status as typeof purchaseOrders.status.column._.data),
+        eq(purchaseOrders.status, q.status as (typeof purchaseOrders.status.enumValues)[number]),
       );
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
@@ -86,7 +86,7 @@ router.get(
   validate({ params: z.object({ id: z.string().uuid() }) }),
   async (req, res) => {
     const po = await db.query.purchaseOrders.findFirst({
-      where: eq(purchaseOrders.id, req.params['id']!),
+      where: eq(purchaseOrders.id, req.params['id'] as string),
     });
     if (!po) {
       res.status(404).json({ error: 'Purchase order not found' });
@@ -171,7 +171,7 @@ router.get(
   requireAuth,
   validate({ query: grnQuerySchema }),
   async (req, res) => {
-    const q = req.query as {
+    const q = req.query as unknown as {
       page: number;
       limit: number;
       site_id?: string;
@@ -182,7 +182,7 @@ router.get(
     const conditions = [];
     if (q.site_id) conditions.push(eq(grns.site_id, q.site_id));
     if (q.po_id) conditions.push(eq(grns.po_id, q.po_id));
-    if (q.status) conditions.push(eq(grns.status, q.status as typeof grns.status.column._.data));
+    if (q.status) conditions.push(eq(grns.status, q.status as (typeof grns.status.enumValues)[number]));
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
     const offset = (q.page - 1) * q.limit;
@@ -207,7 +207,7 @@ router.get(
   validate({ params: z.object({ id: z.string().uuid() }) }),
   async (req, res) => {
     const grn = await db.query.grns.findFirst({
-      where: eq(grns.id, req.params['id']!),
+      where: eq(grns.id, req.params['id'] as string),
     });
     if (!grn) {
       res.status(404).json({ error: 'GRN not found' });
@@ -282,7 +282,7 @@ router.post(
     }),
   }),
   async (req, res) => {
-    const grnId = req.params['id']!;
+    const grnId = req.params['id'] as string;
     const body = req.body as {
       sku_id: string;
       batch_number: string;
@@ -460,7 +460,7 @@ router.post(
   requireRoles('inward', 'supervisor', 'admin'),
   validate({ params: z.object({ id: z.string().uuid() }) }),
   async (req, res) => {
-    const grnId = req.params['id']!;
+    const grnId = req.params['id'] as string;
 
     const grn = await db.query.grns.findFirst({ where: eq(grns.id, grnId) });
     if (!grn) {

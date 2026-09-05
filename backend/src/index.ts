@@ -7,7 +7,7 @@ import express, {
 import helmet from 'helmet';
 import compression from 'compression';
 import { rateLimit } from 'express-rate-limit';
-import pinoHttp from 'pino-http';
+import { pinoHttp } from 'pino-http';
 import http from 'http';
 import { logger } from './logger.js';
 import { checkDbConnection, closeDb } from './db/index.js';
@@ -36,19 +36,19 @@ app.set('trust proxy', parseInt(process.env['TRUST_PROXY'] ?? '1', 10));
 app.use(
   pinoHttp({
     logger,
-    customLogLevel: (_req, res, err) => {
+    customLogLevel: (_req: http.IncomingMessage, res: http.ServerResponse, err?: Error) => {
       if (err || res.statusCode >= 500) return 'error';
       if (res.statusCode >= 400) return 'warn';
       return 'info';
     },
     serializers: {
-      req: (req) => ({
-        id: req.id,
-        method: req.method,
-        url: req.url,
-        remoteAddress: req.remoteAddress,
+      req: (req: Record<string, unknown>) => ({
+        id: req['id'],
+        method: req['method'],
+        url: req['url'],
+        remoteAddress: req['remoteAddress'],
       }),
-      res: (res) => ({ statusCode: res.statusCode }),
+      res: (res: Record<string, unknown>) => ({ statusCode: res['statusCode'] }),
     },
   }),
 );

@@ -21,7 +21,7 @@ router.get(
   requireAuth,
   validate({ query: locationQuerySchema }),
   async (req, res) => {
-    const q = req.query as {
+    const q = req.query as unknown as {
       page: number;
       limit: number;
       site_id?: string;
@@ -31,7 +31,7 @@ router.get(
 
     const conditions = [];
     if (q.site_id) conditions.push(eq(locations.site_id, q.site_id));
-    if (q.type) conditions.push(eq(locations.type, q.type as typeof locations.type.column._.data));
+    if (q.type) conditions.push(eq(locations.type, q.type as (typeof locations.type.enumValues)[number]));
     if (q.is_active !== undefined) conditions.push(eq(locations.is_active, q.is_active));
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
@@ -58,7 +58,7 @@ router.get(
   validate({ params: z.object({ id: z.string().uuid() }) }),
   async (req, res) => {
     const location = await db.query.locations.findFirst({
-      where: eq(locations.id, req.params['id']!),
+      where: eq(locations.id, req.params['id'] as string),
     });
     if (!location) {
       res.status(404).json({ error: 'Location not found' });
@@ -78,7 +78,7 @@ router.post(
     const body = req.body as {
       site_id: string;
       code: string;
-      type: typeof locations.type.column._.data;
+      type: (typeof locations.type.enumValues)[number];
       aisle?: string;
       rack?: string;
       shelf?: string;
@@ -106,7 +106,7 @@ router.put(
   validate({ params: z.object({ id: z.string().uuid() }), body: updateLocationSchema }),
   async (req, res) => {
     const existing = await db.query.locations.findFirst({
-      where: eq(locations.id, req.params['id']!),
+      where: eq(locations.id, req.params['id'] as string),
     });
     if (!existing) {
       res.status(404).json({ error: 'Location not found' });
@@ -116,7 +116,7 @@ router.put(
     const [updated] = await db
       .update(locations)
       .set(req.body as Partial<typeof locations.$inferInsert>)
-      .where(eq(locations.id, req.params['id']!))
+      .where(eq(locations.id, req.params['id'] as string))
       .returning();
 
     res.json(updated);
@@ -150,7 +150,7 @@ router.put(
   requireRoles('admin'),
   validate({ params: z.object({ id: z.string().uuid() }), body: updateSiteSchema }),
   async (req, res) => {
-    const existing = await db.query.sites.findFirst({ where: eq(sites.id, req.params['id']!) });
+    const existing = await db.query.sites.findFirst({ where: eq(sites.id, req.params['id'] as string) });
     if (!existing) {
       res.status(404).json({ error: 'Site not found' });
       return;
@@ -158,7 +158,7 @@ router.put(
     const [updated] = await db
       .update(sites)
       .set(req.body as Partial<typeof sites.$inferInsert>)
-      .where(eq(sites.id, req.params['id']!))
+      .where(eq(sites.id, req.params['id'] as string))
       .returning();
     res.json(updated);
   },

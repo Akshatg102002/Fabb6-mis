@@ -19,7 +19,7 @@ router.get(
   requireAuth,
   validate({ query: returnQuerySchema }),
   async (req, res) => {
-    const q = req.query as {
+    const q = req.query as unknown as {
       page: number;
       limit: number;
       type?: string;
@@ -28,9 +28,9 @@ router.get(
 
     const conditions = [];
     if (q.type)
-      conditions.push(eq(returns.type, q.type as typeof returns.type.column._.data));
+      conditions.push(eq(returns.type, q.type as (typeof returns.type.enumValues)[number]));
     if (q.status)
-      conditions.push(eq(returns.status, q.status as typeof returns.status.column._.data));
+      conditions.push(eq(returns.status, q.status as (typeof returns.status.enumValues)[number]));
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
     const offset = (q.page - 1) * q.limit;
@@ -55,7 +55,7 @@ router.get(
   validate({ params: z.object({ id: z.string().uuid() }) }),
   async (req, res) => {
     const ret = await db.query.returns.findFirst({
-      where: eq(returns.id, req.params['id']!),
+      where: eq(returns.id, req.params['id'] as string),
     });
     if (!ret) {
       res.status(404).json({ error: 'Return not found' });
@@ -83,7 +83,7 @@ router.post(
   }),
   async (req, res) => {
     const body = req.body as {
-      type: typeof returns.type.column._.data;
+      type: (typeof returns.type.enumValues)[number];
       courier_awb?: string;
       order_ref?: string;
       return_number: string;
@@ -124,13 +124,13 @@ router.post(
     }),
   }),
   async (req, res) => {
-    const returnId = req.params['id']!;
+    const returnId = req.params['id'] as string;
     const body = req.body as {
       sku_id: string;
       batch_id?: string;
       qty: number;
-      qc_grade?: typeof returnLines.qc_grade.column._.data;
-      disposition?: typeof returnLines.disposition.column._.data;
+      qc_grade?: (typeof returnLines.qc_grade.enumValues)[number];
+      disposition?: (typeof returnLines.disposition.enumValues)[number];
       line_number: number;
       notes?: string;
     };
@@ -182,7 +182,7 @@ router.post(
     }),
   }),
   async (req, res) => {
-    const returnId = req.params['id']!;
+    const returnId = req.params['id'] as string;
     const body = req.body as { receiving_location_id: string };
 
     const ret = await db.query.returns.findFirst({ where: eq(returns.id, returnId) });

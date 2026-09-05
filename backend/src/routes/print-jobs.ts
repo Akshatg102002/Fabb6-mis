@@ -47,7 +47,7 @@ router.get(
     }),
   }),
   async (req, res) => {
-    const q = req.query as { site_id?: string; printer_id?: string; limit: number };
+    const q = req.query as unknown as { site_id?: string; printer_id?: string; limit: number };
 
     const conditions: string[] = ["status = 'pending'"];
     const params: unknown[] = [];

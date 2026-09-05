@@ -21,7 +21,7 @@ router.get(
   requireRoles('supervisor', 'admin', 'read_only'),
   validate({ query: reportQuerySchema }),
   async (req, res) => {
-    const q = req.query as { site_id: string; as_of?: string };
+    const q = req.query as unknown as { site_id: string; as_of?: string };
 
     // For a point-in-time valuation we replay movements up to as_of
     const asOf = q.as_of ? new Date(q.as_of) : new Date();
@@ -102,7 +102,7 @@ router.get(
     }),
   }),
   async (req, res) => {
-    const q = req.query as { site_id: string; from: string; to: string };
+    const q = req.query as unknown as { site_id: string; from: string; to: string };
 
     const result = await pool.query(
       `SELECT
@@ -146,7 +146,7 @@ router.get(
   requireRoles('supervisor', 'admin', 'read_only'),
   validate({ query: z.object({ site_id: z.string().uuid() }) }),
   async (req, res) => {
-    const { site_id } = req.query as { site_id: string };
+    const { site_id } = req.query as unknown as { site_id: string };
 
     const result = await pool.query(
       `SELECT
@@ -194,7 +194,7 @@ router.get(
     }),
   }),
   async (req, res) => {
-    const q = req.query as {
+    const q = req.query as unknown as {
       sku_id: string;
       from: string;
       to: string;

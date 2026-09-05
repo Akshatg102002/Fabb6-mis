@@ -23,7 +23,7 @@ router.get(
   requireAuth,
   validate({ query: countQuerySchema }),
   async (req, res) => {
-    const q = req.query as {
+    const q = req.query as unknown as {
       page: number;
       limit: number;
       site_id?: string;
@@ -34,7 +34,7 @@ router.get(
     if (q.site_id) conditions.push(eq(cycleCounts.site_id, q.site_id));
     if (q.status)
       conditions.push(
-        eq(cycleCounts.status, q.status as typeof cycleCounts.status.column._.data),
+        eq(cycleCounts.status, q.status as (typeof cycleCounts.status.enumValues)[number]),
       );
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
@@ -66,7 +66,7 @@ router.get(
   validate({ params: z.object({ id: z.string().uuid() }) }),
   async (req, res) => {
     const cc = await db.query.cycleCounts.findFirst({
-      where: eq(cycleCounts.id, req.params['id']!),
+      where: eq(cycleCounts.id, req.params['id'] as string),
     });
     if (!cc) {
       res.status(404).json({ error: 'Cycle count not found' });

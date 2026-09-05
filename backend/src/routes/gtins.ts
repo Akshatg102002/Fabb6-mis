@@ -15,7 +15,7 @@ router.get(
   requireAuth,
   validate({ query: barcodeQuerySchema }),
   async (req, res) => {
-    const { barcode } = req.query as { barcode: string };
+    const { barcode } = req.query as unknown as { barcode: string };
 
     const gtin = await db.query.gtins.findFirst({
       where: eq(gtins.barcode, barcode),

@@ -23,7 +23,7 @@ router.get(
     }),
   }),
   async (req, res) => {
-    const q = req.query as { site_id?: string; assigned_to?: string };
+    const q = req.query as unknown as { site_id?: string; assigned_to?: string };
 
     const result = await pool.query<{
       grn_id: string;
@@ -142,7 +142,7 @@ router.get(
     }),
   }),
   async (req, res) => {
-    const q = req.query as { sku_id: string; site_id: string };
+    const q = req.query as unknown as { sku_id: string; site_id: string };
 
     const sku = await db.query.skus.findFirst({ where: eq(skus.id, q.sku_id) });
     if (!sku) {

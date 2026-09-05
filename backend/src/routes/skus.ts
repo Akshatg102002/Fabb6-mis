@@ -11,7 +11,7 @@ const router = Router();
 
 // GET /skus
 router.get('/', requireAuth, validate({ query: skuQuerySchema }), async (req, res) => {
-  const q = req.query as {
+  const q = req.query as unknown as {
     page: number;
     limit: number;
     search?: string;
@@ -61,7 +61,7 @@ router.get('/', requireAuth, validate({ query: skuQuerySchema }), async (req, re
 // GET /skus/:id
 router.get('/:id', requireAuth, async (req, res) => {
   const sku = await db.query.skus.findFirst({
-    where: eq(skus.id, req.params['id']!),
+    where: eq(skus.id, req.params['id'] as string),
   });
 
   if (!sku) {
@@ -119,7 +119,7 @@ router.patch(
   validate({ body: updateSkuSchema }),
   async (req, res) => {
     const existing = await db.query.skus.findFirst({
-      where: eq(skus.id, req.params['id']!),
+      where: eq(skus.id, req.params['id'] as string),
     });
 
     if (!existing) {
@@ -143,7 +143,7 @@ router.patch(
     const [updated] = await db
       .update(skus)
       .set(updates)
-      .where(eq(skus.id, req.params['id']!))
+      .where(eq(skus.id, req.params['id'] as string))
       .returning();
 
     res.json(updated);
@@ -153,7 +153,7 @@ router.patch(
 // DELETE /skus/:id (soft delete)
 router.delete('/:id', requireAuth, requireRoles('admin'), async (req, res) => {
   const existing = await db.query.skus.findFirst({
-    where: eq(skus.id, req.params['id']!),
+    where: eq(skus.id, req.params['id'] as string),
   });
 
   if (!existing) {
@@ -161,7 +161,7 @@ router.delete('/:id', requireAuth, requireRoles('admin'), async (req, res) => {
     return;
   }
 
-  await db.update(skus).set({ is_active: false }).where(eq(skus.id, req.params['id']!));
+  await db.update(skus).set({ is_active: false }).where(eq(skus.id, req.params['id'] as string));
 
   res.status(204).send();
 });

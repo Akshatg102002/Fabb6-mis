@@ -13,7 +13,7 @@ router.get(
   requireAuth,
   validate({ query: stockQuerySchema }),
   async (req, res) => {
-    const q = req.query as {
+    const q = req.query as unknown as {
       page: number;
       limit: number;
       site_id?: string;
@@ -97,7 +97,7 @@ router.get(
   requireAuth,
   validate({ query: movementQuerySchema }),
   async (req, res) => {
-    const q = req.query as {
+    const q = req.query as unknown as {
       page: number;
       limit: number;
       sku_id?: string;
@@ -181,7 +181,7 @@ router.get(
     }),
   }),
   async (req, res) => {
-    const q = req.query as { site_id: string; days_bucket: number };
+    const q = req.query as unknown as { site_id: string; days_bucket: number };
 
     const result = await pool.query(
       `SELECT
@@ -223,7 +223,7 @@ router.get(
     }),
   }),
   async (req, res) => {
-    const q = req.query as { site_id: string };
+    const q = req.query as unknown as { site_id: string };
 
     const result = await pool.query(
       `SELECT
