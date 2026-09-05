@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useOfflineQueue } from '@/hooks/useOfflineQueue';
+import { ToastProvider } from '@/components/toast/ToastProvider';
 
 // Eagerly loaded pages
 import Login from '@/pages/Login';
@@ -17,6 +18,7 @@ const PackOrder = lazy(() => import('@/pages/packing/PackOrder'));
 const CycleCount = lazy(() => import('@/pages/counting/CycleCount'));
 const ReturnInward = lazy(() => import('@/pages/returns/ReturnInward'));
 const StockOnHand = lazy(() => import('@/pages/stock/StockOnHand'));
+const Settings = lazy(() => import('@/pages/settings/Settings'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -73,6 +75,7 @@ function OfflineQueueBootstrap({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <ToastProvider>
       <BrowserRouter>
         <Suspense fallback={<PageFallback />}>
           <Routes>
@@ -121,6 +124,12 @@ export default function App() {
                       {/* Stock */}
                       <Route path="/stock" element={<StockOnHand />} />
 
+                      {/* Settings */}
+                      <Route path="/settings" element={<Settings />} />
+
+                      {/* Reports — placeholder redirect to stock */}
+                      <Route path="/reports" element={<Navigate to="/stock" replace />} />
+
                       {/* Fallback */}
                       <Route path="*" element={<Navigate to="/home" replace />} />
                     </Routes>
@@ -134,6 +143,7 @@ export default function App() {
           </Routes>
         </Suspense>
       </BrowserRouter>
+      </ToastProvider>
     </QueryClientProvider>
   );
 }
