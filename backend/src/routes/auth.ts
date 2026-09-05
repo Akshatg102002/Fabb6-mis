@@ -7,7 +7,7 @@ import { users, sessions } from '../db/schema/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { loginSchema, logoutSchema } from '../schemas/auth.js';
-import { logger } from '../index.js';
+import { logger } from '../logger.js';
 
 const router = Router();
 

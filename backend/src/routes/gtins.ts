@@ -1,16 +1,15 @@
 import { Router } from 'express';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { gtins, skus } from '../db/schema/index.js';
 import { requireAuth, requireRoles } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
-import { createGtinSchema, linkGtinSchema, barcodeQuerySchema } from '../schemas/catalogue.js';
+import { createGtinSchema, barcodeQuerySchema } from '../schemas/catalogue.js';
 import { z } from 'zod';
 
 const router = Router();
 
-// GET /gtins/lookup?barcode=...
-// Used by scanners to look up a SKU from a barcode
+// GET /gtins/lookup?barcode= — resolve a barcode to its SKU
 router.get(
   '/lookup',
   requireAuth,
@@ -20,45 +19,32 @@ router.get(
 
     const gtin = await db.query.gtins.findFirst({
       where: eq(gtins.barcode, barcode),
+      with: { sku_id: false } as never,
     });
 
-    if (!gtin) {
-      res.status(404).json({ error: 'Barcode not found', barcode });
+    // Use raw query to get joined SKU
+    const row = await db.query.gtins.findFirst({
+      where: eq(gtins.barcode, barcode),
+    });
+
+    if (!row) {
+      res.json({ found: false, barcode });
       return;
     }
 
     const sku = await db.query.skus.findFirst({
-      where: eq(skus.id, gtin.sku_id),
+      where: eq(skus.id, row.sku_id),
     });
 
-    if (!sku) {
-      res.status(404).json({ error: 'SKU linked to barcode not found' });
-      return;
-    }
-
-    res.json({ gtin, sku });
+    res.json({ found: true, gtin: row, sku });
   },
 );
 
-// GET /gtins/sku/:skuId — list all barcodes for a SKU
-router.get('/sku/:skuId', requireAuth, async (req, res) => {
-  const skuId = req.params['skuId']!;
-
-  const sku = await db.query.skus.findFirst({ where: eq(skus.id, skuId) });
-  if (!sku) {
-    res.status(404).json({ error: 'SKU not found' });
-    return;
-  }
-
-  const rows = await db.select().from(gtins).where(eq(gtins.sku_id, skuId));
-  res.json(rows);
-});
-
-// POST /gtins — create a new GTIN mapping
+// POST /gtins — link a barcode to a SKU (inward role minimum)
 router.post(
   '/',
   requireAuth,
-  requireRoles('admin', 'supervisor', 'inward'),
+  requireRoles('inward', 'supervisor', 'admin'),
   validate({ body: createGtinSchema }),
   async (req, res) => {
     const body = req.body as {
@@ -68,81 +54,56 @@ router.post(
       is_primary: boolean;
     };
 
-    // Check if barcode already exists
-    const existing = await db.query.gtins.findFirst({
-      where: eq(gtins.barcode, body.barcode),
+    const skuExists = await db.query.skus.findFirst({
+      where: eq(skus.id, body.sku_id),
     });
-
-    if (existing) {
-      res.status(409).json({
-        error: 'Barcode already exists',
-        linked_sku_id: existing.sku_id,
-        barcode: body.barcode,
-      });
+    if (!skuExists) {
+      res.status(404).json({ error: 'SKU not found' });
       return;
     }
 
-    // If is_primary, demote existing primary
+    const existing = await db.query.gtins.findFirst({
+      where: eq(gtins.barcode, body.barcode),
+    });
+    if (existing) {
+      res.status(409).json({ error: 'Barcode already registered', gtin: existing });
+      return;
+    }
+
+    // If setting as primary, clear existing primary for the SKU
     if (body.is_primary) {
       await db
         .update(gtins)
         .set({ is_primary: false })
-        .where(and(eq(gtins.sku_id, body.sku_id), eq(gtins.is_primary, true)));
+        .where(eq(gtins.sku_id, body.sku_id));
     }
 
-    const [gtin] = await db.insert(gtins).values(body).returning();
-    res.status(201).json(gtin);
+    const [created] = await db.insert(gtins).values(body).returning();
+
+    res.status(201).json(created);
   },
 );
 
-// PATCH /gtins/:id/link — reassign a barcode to a different SKU
-router.patch(
-  '/:id/link',
+// DELETE /gtins/:barcode — remove a barcode mapping (admin only)
+router.delete(
+  '/:barcode',
   requireAuth,
-  requireRoles('admin', 'supervisor'),
-  validate({ body: linkGtinSchema }),
+  requireRoles('admin'),
+  validate({ params: z.object({ barcode: z.string().min(1).max(50) }) }),
   async (req, res) => {
-    const { sku_id, is_primary } = req.body as { sku_id: string; is_primary?: boolean };
-    const gtinId = req.params['id']!;
+    const { barcode } = req.params as { barcode: string };
 
     const existing = await db.query.gtins.findFirst({
-      where: eq(gtins.id, gtinId),
+      where: eq(gtins.barcode, barcode),
     });
-
     if (!existing) {
-      res.status(404).json({ error: 'GTIN not found' });
+      res.status(404).json({ error: 'Barcode not found' });
       return;
     }
 
-    const updates: Partial<typeof gtins.$inferInsert> = { sku_id };
-    if (is_primary !== undefined) {
-      updates.is_primary = is_primary;
-      if (is_primary) {
-        await db
-          .update(gtins)
-          .set({ is_primary: false })
-          .where(and(eq(gtins.sku_id, sku_id), eq(gtins.is_primary, true)));
-      }
-    }
-
-    const [updated] = await db.update(gtins).set(updates).where(eq(gtins.id, gtinId)).returning();
-    res.json(updated);
+    await db.delete(gtins).where(eq(gtins.barcode, barcode));
+    res.status(204).send();
   },
 );
-
-// DELETE /gtins/:id
-router.delete('/:id', requireAuth, requireRoles('admin', 'supervisor'), async (req, res) => {
-  const existing = await db.query.gtins.findFirst({
-    where: eq(gtins.id, req.params['id']!),
-  });
-
-  if (!existing) {
-    res.status(404).json({ error: 'GTIN not found' });
-    return;
-  }
-
-  await db.delete(gtins).where(eq(gtins.id, req.params['id']!));
-  res.status(204).send();
-});
 
 export default router;

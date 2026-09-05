@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { db } from '../db/index.js';
 import { auditLog } from '../db/schema/index.js';
-import { logger } from '../index.js';
+import { logger } from '../logger.js';
 
 export interface AuditOptions {
   entity: string;

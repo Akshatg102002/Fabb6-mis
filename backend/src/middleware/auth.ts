@@ -4,7 +4,7 @@ import { eq, and, gt, isNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { sessions, users } from '../db/schema/index.js';
 import type { UserRole } from '../db/schema/index.js';
-import { logger } from '../index.js';
+import { logger } from '../logger.js';
 
 export interface AuthContext {
   userId: string;

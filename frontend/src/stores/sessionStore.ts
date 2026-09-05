@@ -6,9 +6,11 @@ export type UserRole = 'floor_worker' | 'supervisor' | 'manager' | 'admin';
 export interface AuthUser {
   id: string;
   name: string;
-  pin: string; // hashed, never plaintext after login
+  /** Token or hashed PIN — absent when auth is server-side token-only */
+  pin?: string;
   role: UserRole;
   badgeId: string;
+  site_id?: string | null;
 }
 
 export type ScanMode =
@@ -75,13 +77,13 @@ export const useSessionStore = create<SessionState>()(
           session: defaultSession,
         }),
 
-      startSession: (mode, taskId = null, locationId = null) =>
+      startSession: (mode, taskId = undefined, locationId = undefined) =>
         set((state) => ({
           session: {
             ...defaultSession,
             mode,
-            taskId,
-            locationId,
+            taskId: taskId ?? null,
+            locationId: locationId ?? null,
             startedAt: Date.now(),
             scansInSession: 0,
             lastScanBarcode: state.session.lastScanBarcode,

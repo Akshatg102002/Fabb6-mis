@@ -1,5 +1,5 @@
 import { pool } from '../db/index.js';
-import { logger } from '../index.js';
+import { logger } from '../logger.js';
 
 export interface FefoAllocation {
   batchId: string;

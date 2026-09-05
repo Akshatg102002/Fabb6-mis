@@ -1,5 +1,5 @@
 import PgBoss from 'pg-boss';
-import { logger } from '../index.js';
+import { logger } from '../logger.js';
 import { runShopifySyncJob } from './shopify-sync.js';
 import { runExpiryAlertsJob } from './expiry-alerts.js';
 import { runReorderCalcJob } from './reorder-calc.js';

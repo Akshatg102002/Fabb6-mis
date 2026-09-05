@@ -1,6 +1,6 @@
 import { pool } from '../db/index.js';
 import { getExpiringBatches } from '../services/fefo.js';
-import { logger } from '../index.js';
+import { logger } from '../logger.js';
 
 const WARNING_DAYS = parseInt(process.env['EXPIRY_WARNING_DAYS'] ?? '30', 10);
 

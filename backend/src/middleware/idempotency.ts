@@ -3,7 +3,7 @@ import { createHash } from 'crypto';
 import { eq, lt } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { idempotencyKeys } from '../db/schema/index.js';
-import { logger } from '../index.js';
+import { logger } from '../logger.js';
 
 const IDEMPOTENCY_HEADER = 'idempotency-key';
 const IDEMPOTENCY_TTL_HOURS = 24;

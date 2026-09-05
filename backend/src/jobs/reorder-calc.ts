@@ -1,5 +1,5 @@
 import { pool } from '../db/index.js';
-import { logger } from '../index.js';
+import { logger } from '../logger.js';
 
 const REORDER_LOOKBACK_DAYS = parseInt(process.env['REORDER_LOOKBACK_DAYS'] ?? '30', 10);
 

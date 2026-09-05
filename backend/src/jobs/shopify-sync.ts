@@ -1,5 +1,5 @@
 import { syncStockToShopify } from '../services/shopify-sync.js';
-import { logger } from '../index.js';
+import { logger } from '../logger.js';
 
 export async function runShopifySyncJob(): Promise<void> {
   if (!process.env['SHOPIFY_SHOP_DOMAIN']) {

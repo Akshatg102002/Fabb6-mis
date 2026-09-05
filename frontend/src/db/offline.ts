@@ -34,12 +34,13 @@ export const db = new Fabb6OfflineDB();
 export async function enqueue(
   mutation: Omit<OfflineMutation, 'id' | 'timestamp' | 'retries' | 'status'>,
 ): Promise<number> {
-  return db.mutations.add({
+  const id = await db.mutations.add({
     ...mutation,
     timestamp: Date.now(),
     retries: 0,
     status: 'pending',
   });
+  return id as number;
 }
 
 /** Mark a mutation as successfully synced by deleting it */

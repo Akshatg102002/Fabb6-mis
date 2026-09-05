@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { pool } from '../db/index.js';
-import { logger } from '../index.js';
+import { logger } from '../logger.js';
 import type { MovementType, ReferenceType } from '../db/schema/index.js';
 
 const { DatabaseError } = pg;
