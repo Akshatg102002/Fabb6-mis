@@ -1,16 +1,13 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-export type UserRole = 'floor_worker' | 'supervisor' | 'manager' | 'admin';
+export type UserRole = 'picker' | 'packer' | 'inward' | 'returns' | 'supervisor' | 'admin' | 'read_only';
 
 export interface AuthUser {
   id: string;
   name: string;
-  /** Token or hashed PIN — absent when auth is server-side token-only */
-  pin?: string;
   role: UserRole;
-  badgeId: string;
-  site_id?: string | null;
+  site_id: string | null;
 }
 
 export type ScanMode =
@@ -34,11 +31,13 @@ export interface ScanSession {
 
 interface SessionState {
   user: AuthUser | null;
+  token: string | null;
+  deviceId: string;
   isAuthenticated: boolean;
   session: ScanSession;
 
   // Actions
-  login: (user: AuthUser) => void;
+  login: (user: AuthUser, token: string) => void;
   logout: () => void;
   startSession: (mode: ScanMode, taskId?: string, locationId?: string) => void;
   endSession: () => void;
@@ -56,16 +55,32 @@ const defaultSession: ScanSession = {
   lastScanOutcome: null,
 };
 
+function getOrCreateDeviceId(): string {
+  try {
+    const key = 'fabb6-device-id';
+    const existing = localStorage.getItem(key);
+    if (existing) return existing;
+    const id = crypto.randomUUID();
+    localStorage.setItem(key, id);
+    return id;
+  } catch {
+    return 'device-' + Math.random().toString(36).slice(2);
+  }
+}
+
 export const useSessionStore = create<SessionState>()(
   persist(
     (set) => ({
       user: null,
+      token: null,
+      deviceId: getOrCreateDeviceId(),
       isAuthenticated: false,
       session: defaultSession,
 
-      login: (user) =>
+      login: (user, token) =>
         set({
           user,
+          token,
           isAuthenticated: true,
           session: defaultSession,
         }),
@@ -73,6 +88,7 @@ export const useSessionStore = create<SessionState>()(
       logout: () =>
         set({
           user: null,
+          token: null,
           isAuthenticated: false,
           session: defaultSession,
         }),
@@ -122,6 +138,8 @@ export const useSessionStore = create<SessionState>()(
       // Do not persist the scan session itself — workers should start fresh
       partialize: (state) => ({
         user: state.user,
+        token: state.token,
+        deviceId: state.deviceId,
         isAuthenticated: state.isAuthenticated,
       }),
     },

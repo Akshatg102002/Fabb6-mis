@@ -11,30 +11,41 @@ import { logger } from '../logger.js';
 
 const router = Router();
 
-// POST /auth/login
+// GET /auth/users — list active users by name for device login picker
+router.get('/users', async (req, res) => {
+  const siteId = req.query['site_id'] as string | undefined;
+  const allUsers = await db.query.users.findMany({
+    where: siteId ? and(eq(users.is_active, true), eq(users.site_id, siteId)) : eq(users.is_active, true),
+    columns: { id: true, name: true, role: true, site_id: true },
+    orderBy: (u, { asc }) => [asc(u.name)],
+  });
+  res.json({ users: allUsers });
+});
+
+// POST /auth/login — PIN-only login; backend iterates active users to find matching hash
 router.post('/login', validate({ body: loginSchema }), async (req, res) => {
-  const { user_id, pin, device_id, site_id } = req.body as {
-    user_id: string;
+  const { pin, device_id } = req.body as {
     pin: string;
     device_id: string;
-    site_id?: string;
   };
 
-  const user = await db.query.users.findFirst({
-    where: and(eq(users.id, user_id), eq(users.is_active, true)),
+  const allUsers = await db.query.users.findMany({
+    where: eq(users.is_active, true),
   });
 
+  let user: typeof allUsers[number] | null = null;
+  for (const candidate of allUsers) {
+    const match = await argon2.verify(candidate.pin_hash, pin);
+    if (match) { user = candidate; break; }
+  }
+
   if (!user) {
+    logger.warn({ deviceId: device_id }, 'Failed PIN login attempt');
     res.status(401).json({ error: 'Invalid credentials' });
     return;
   }
 
-  const pinValid = await argon2.verify(user.pin_hash, pin);
-  if (!pinValid) {
-    logger.warn({ userId: user_id, deviceId: device_id }, 'Failed PIN login attempt');
-    res.status(401).json({ error: 'Invalid credentials' });
-    return;
-  }
+  const site_id: string | null = null;
 
   // Revoke any existing sessions for this user + device
   await db
@@ -42,7 +53,7 @@ router.post('/login', validate({ body: loginSchema }), async (req, res) => {
     .set({ revoked_at: new Date() })
     .where(
       and(
-        eq(sessions.user_id, user_id),
+        eq(sessions.user_id, user.id),
         eq(sessions.device_id, device_id),
         isNull(sessions.revoked_at),
       ),

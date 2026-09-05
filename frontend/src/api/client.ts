@@ -1,7 +1,7 @@
 import { useSessionStore } from '@/stores/sessionStore';
 import { useQueueStore } from '@/stores/queueStore';
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? '/api';
+const API_BASE = import.meta.env.VITE_API_BASE ?? '/api/v1';
 
 export class ApiError extends Error {
   constructor(
@@ -40,17 +40,17 @@ export async function apiClient<T = unknown>(
   opts: ApiRequestOptions = {},
 ): Promise<T> {
   const { method = 'GET', body, headers = {}, signal, retries = 2 } = opts;
-  const user = useSessionStore.getState().user;
+  const { token, deviceId } = useSessionStore.getState();
 
   const reqHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
+    'X-Device-Id': deviceId,
     ...headers,
   };
 
-  if (user?.pin) {
-    // Replace with your auth scheme (JWT, session token, etc.)
-    reqHeaders['Authorization'] = `Bearer ${user.pin}`;
+  if (token) {
+    reqHeaders['Authorization'] = `Bearer ${token}`;
   }
 
   const url = path.startsWith('http') ? path : `${API_BASE}${path}`;

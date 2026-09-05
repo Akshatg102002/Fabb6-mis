@@ -12,7 +12,6 @@ interface LoginResponse {
     name: string;
     role: string;
     site_id: string | null;
-    badgeId: string;
   };
 }
 
@@ -22,6 +21,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
 
   const login = useSessionStore((s) => s.login);
+  const deviceId = useSessionStore((s) => s.deviceId);
   const navigate = useNavigate();
 
   function pressDigit(d: string) {
@@ -45,16 +45,27 @@ export default function Login() {
     try {
       const res = await apiClient<LoginResponse>('/auth/login', {
         method: 'POST',
-        body: { pin },
+        body: { pin, device_id: deviceId },
       });
-      login(res.user as Parameters<typeof login>[0]);
+      login(
+        { id: res.user.id, name: res.user.name, role: res.user.role as Parameters<typeof login>[0]['role'], site_id: res.user.site_id },
+        res.token,
+      );
       const role = res.user.role;
       const dest =
-        role === 'admin' || role === 'manager'
+        role === 'admin' || role === 'read_only'
           ? '/stock'
           : role === 'supervisor'
           ? '/home'
-          : '/pick';
+          : role === 'picker'
+          ? '/pick'
+          : role === 'packer'
+          ? '/pack'
+          : role === 'inward'
+          ? '/inward'
+          : role === 'returns'
+          ? '/returns'
+          : '/home';
       navigate(dest, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
