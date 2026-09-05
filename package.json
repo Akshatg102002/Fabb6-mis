@@ -1,0 +1,17 @@
+{
+  "name": "fabb6-wms",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "install:all": "npm i && npm i --prefix backend && npm i --prefix frontend && npm i --prefix print-agent",
+    "dev": "concurrently \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
+    "build": "npm run build --prefix backend && npm run build --prefix frontend",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "db:migrate": "npm run db:migrate --prefix backend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
