@@ -267,15 +267,9 @@ BEGIN
   ON CONFLICT (idempotency_key) DO NOTHING;
 END $$;
 
--- ─────────────────────────────────────────────────────────────
--- 8. REFRESH stock_on_hand if the materialized view exists
---    (created by 0001_initial.sql; skipped when using db:push schema)
--- ─────────────────────────────────────────────────────────────
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_matviews WHERE matviewname = 'stock_on_hand') THEN
-    REFRESH MATERIALIZED VIEW CONCURRENTLY stock_on_hand;
-  END IF;
-END $$;
+-- NOTE: stock_on_hand is a materialized view created by 0001_initial.sql.
+-- It is NOT present when using db:push. If you have run 0001_initial.sql,
+-- refresh it manually after seeding:
+--   REFRESH MATERIALIZED VIEW CONCURRENTLY stock_on_hand;
 
 COMMIT;
