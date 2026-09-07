@@ -19,6 +19,7 @@ export const stockQuerySchema = z.object({
 
 export const movementQuerySchema = z.object({
   sku_id: z.string().uuid().optional(),
+  sku_code: z.string().max(100).optional(),
   location_id: z.string().uuid().optional(),
   movement_type: z
     .enum([

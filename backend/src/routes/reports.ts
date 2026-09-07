@@ -57,20 +57,25 @@ router.get(
          HAVING SUM(inbound) > 0
        )
        SELECT
-         s.id              AS sku_id,
-         s.code            AS sku_code,
-         s.name            AS sku_name,
+         s.id                                           AS sku_id,
+         s.code                                         AS sku_code,
+         s.name                                         AS sku_name,
+         COALESCE(br.name, 'Unbranded')                 AS brand_name,
+         l.code                                         AS location_code,
+         s.uom,
          b.batch_number,
          b.expiry_date,
-         SUM(st.quantity)  AS total_qty,
+         SUM(st.quantity)                               AS total_qty,
+         s.mrp::numeric                                 AS mrp,
          COALESCE(AVG(b.landed_cost_per_unit::numeric), s.standard_cost::numeric, 0) AS unit_cost,
          SUM(st.quantity) * COALESCE(AVG(b.landed_cost_per_unit::numeric), s.standard_cost::numeric, 0) AS total_value
        FROM stock st
-       JOIN skus      s ON s.id = st.sku_id
-       LEFT JOIN batches   b ON b.id = st.batch_id
-       JOIN locations l ON l.id = st.location_id
+       JOIN skus      s  ON s.id  = st.sku_id
+       LEFT JOIN batches   b  ON b.id  = st.batch_id
+       LEFT JOIN brands    br ON br.id = s.brand_id
+       JOIN locations l  ON l.id  = st.location_id
        WHERE l.site_id = $1
-       GROUP BY s.id, s.code, s.name, b.batch_number, b.expiry_date, s.standard_cost
+       GROUP BY s.id, s.code, s.name, br.name, l.code, s.uom, s.mrp, b.batch_number, b.expiry_date, s.standard_cost
        ORDER BY total_value DESC NULLS LAST`,
       [q.site_id, asOf],
     );

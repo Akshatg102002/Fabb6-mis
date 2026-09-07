@@ -67,12 +67,14 @@ const tdStyle: React.CSSProperties = {
   borderBottom: '1px solid var(--border)',
 };
 
-function fmtINR(v: number | string | null): string {
+function fmtINR(v: number | string | null | undefined): string {
   if (v == null) return '—';
-  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Number(v));
+  const n = Number(v);
+  if (isNaN(n)) return '—';
+  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n);
 }
 
-function fmtDate(d: string | null): string {
+function fmtDate(d: string | null | undefined): string {
   if (!d) return '—';
   return new Date(d).toLocaleDateString('en-IN');
 }
@@ -80,11 +82,50 @@ function fmtDate(d: string | null): string {
 // ── Site selector hook ─────────────────────────────────────────────────────
 
 function useSites() {
-  return useQuery<{ id: string; name: string }[]>({
+  return useQuery<{ id: string; name: string; is_active: boolean }[]>({
     queryKey: ['sites'],
-    queryFn: () => apiClient<{ id: string; name: string }[]>('/locations/sites'),
+    queryFn: () => apiClient<{ id: string; name: string; is_active: boolean }[]>('/locations/sites'),
     staleTime: 300_000,
   });
+}
+
+function useSiteId(): string {
+  const user = useSessionStore((s) => s.user);
+  const { data: sites } = useSites();
+
+  try {
+    const stored = localStorage.getItem('fabb6_site_id');
+    if (stored) return stored;
+  } catch { /* ignore */ }
+
+  if (user?.site_id) return user.site_id;
+  if (sites && sites.length > 0) {
+    const active = sites.find((s) => s.is_active) ?? sites[0];
+    return active!.id;
+  }
+  return '';
+}
+
+// ── Loading / empty states ─────────────────────────────────────────────────
+
+function LoadingRow({ cols }: { cols: number }) {
+  return (
+    <tr>
+      <td colSpan={cols} style={{ ...tdStyle, textAlign: 'center', color: 'var(--text-muted)', padding: '3rem' }}>
+        Loading…
+      </td>
+    </tr>
+  );
+}
+
+function EmptyRow({ cols, message = 'No data yet' }: { cols: number; message?: string }) {
+  return (
+    <tr>
+      <td colSpan={cols} style={{ ...tdStyle, textAlign: 'center', color: 'var(--text-muted)', padding: '3rem' }}>
+        {message}
+      </td>
+    </tr>
+  );
 }
 
 // ── Tab 1: Stock Valuation ─────────────────────────────────────────────────
@@ -93,9 +134,13 @@ interface ValuationRow {
   sku_id: string;
   sku_code: string;
   sku_name: string;
+  brand_name: string;
+  location_code: string;
+  uom: string;
   batch_number: string | null;
   expiry_date: string | null;
   total_qty: string;
+  mrp: string | null;
   unit_cost: string;
   total_value: string;
 }
@@ -108,48 +153,58 @@ interface ValuationResponse {
 }
 
 function StockValuationTab() {
-  const user = useSessionStore((s) => s.user);
-  const { data: sites } = useSites();
-  const [siteId, setSiteId] = useState(() => {
-    try { return localStorage.getItem('fabb6_site_id') ?? user?.site_id ?? ''; }
-    catch { return user?.site_id ?? ''; }
-  });
+  const siteId = useSiteId();
+  const { data: sites, isLoading: sitesLoading } = useSites();
 
+  // Store siteId in state so the query re-runs when it resolves
+  const [resolvedSiteId, setResolvedSiteId] = useState('');
   useEffect(() => {
-    if (!siteId && sites && sites.length > 0) setSiteId(sites[0]!.id);
-  }, [sites, siteId]);
+    if (siteId) setResolvedSiteId(siteId);
+    else if (!sitesLoading && sites && sites.length > 0) {
+      const active = sites.find((s) => s.is_active) ?? sites[0];
+      setResolvedSiteId(active!.id);
+    }
+  }, [siteId, sites, sitesLoading]);
 
   const { data, isLoading, error } = useQuery<ValuationResponse>({
-    queryKey: ['reports', 'stock-valuation', siteId],
-    queryFn: () => apiClient<ValuationResponse>(`/reports/stock-valuation?site_id=${siteId}`),
-    enabled: !!siteId,
+    queryKey: ['reports', 'stock-valuation', resolvedSiteId],
+    queryFn: () => apiClient<ValuationResponse>(`/reports/stock-valuation?site_id=${resolvedSiteId}`),
+    enabled: !!resolvedSiteId,
     staleTime: 60_000,
   });
 
+  const rows = data?.data ?? [];
+  const COLS = ['SKU Code', 'SKU Name', 'Brand', 'Location', 'Batch', 'QTY', 'UOM', 'MRP (₹)', 'Stock Value (₹)'];
+
   function handleDownload() {
-    if (!data?.data.length) return;
+    if (!rows.length) return;
     const csv = toCSV(
-      data.data.map((r) => ({
+      rows.map((r) => ({
         'SKU Code': r.sku_code,
         'SKU Name': r.sku_name,
+        'Brand': r.brand_name,
+        'Location': r.location_code,
         'Batch': r.batch_number ?? '',
-        'Expiry Date': r.expiry_date ? fmtDate(r.expiry_date) : '',
-        'Qty': Number(r.total_qty),
+        'Expiry': r.expiry_date ? fmtDate(r.expiry_date) : '',
+        'QTY': Number(r.total_qty),
+        'UOM': r.uom,
+        'MRP (INR)': r.mrp ? Number(r.mrp) : '',
         'Unit Cost (INR)': Number(r.unit_cost),
-        'Total Value (INR)': Number(r.total_value),
+        'Stock Value (INR)': Number(r.total_value),
       })),
-      ['SKU Code', 'SKU Name', 'Batch', 'Expiry Date', 'Qty', 'Unit Cost (INR)', 'Total Value (INR)'],
+      ['SKU Code', 'SKU Name', 'Brand', 'Location', 'Batch', 'Expiry', 'QTY', 'UOM', 'MRP (INR)', 'Unit Cost (INR)', 'Stock Value (INR)'],
     );
     downloadCSV(`stock-valuation-${new Date().toISOString().slice(0, 10)}.csv`, csv);
   }
 
+  const showLoading = isLoading || (sitesLoading && !resolvedSiteId);
+  const noSite = !sitesLoading && !resolvedSiteId;
+
   return (
     <div>
       <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
-        {data && (
-          <Button variant="secondary" size="sm" onClick={handleDownload}>
-            ↓ Download CSV
-          </Button>
+        {rows.length > 0 && (
+          <Button variant="secondary" size="sm" onClick={handleDownload}>↓ Download CSV</Button>
         )}
         {data && (
           <span style={{ fontSize: '13px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
@@ -157,105 +212,113 @@ function StockValuationTab() {
           </span>
         )}
       </div>
-      {isLoading && <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '3rem 0' }}>Loading…</p>}
+
+      {noSite && <p style={{ color: 'var(--scan-error)', textAlign: 'center', padding: '3rem 0' }}>No sites configured. Add a site first.</p>}
       {error && <p style={{ color: 'var(--scan-error)', textAlign: 'center' }}>Failed to load stock valuation.</p>}
 
-      {data && (
-        <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--border)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', backgroundColor: 'var(--surface)' }}>
-            <thead>
-              <tr>
-                {['SKU Code', 'Name', 'Batch', 'Expiry', 'Qty', 'Unit Cost', 'Total Value'].map((h) => (
-                  <th key={h} style={{ ...tableHeaderStyle, textAlign: h === 'Qty' || h === 'Unit Cost' || h === 'Total Value' ? 'right' : 'left' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {data.data.length === 0 ? (
-                <tr><td colSpan={7} style={{ ...tdStyle, textAlign: 'center', color: 'var(--text-muted)' }}>No stock found</td></tr>
-              ) : data.data.map((r, i) => (
-                <tr key={i}>
-                  <td style={{ ...tdStyle, fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px' }}>{r.sku_code}</td>
-                  <td style={{ ...tdStyle, maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.sku_name}</td>
-                  <td style={{ ...tdStyle, fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', color: 'var(--text-muted)' }}>{r.batch_number ?? '—'}</td>
-                  <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{fmtDate(r.expiry_date)}</td>
-                  <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{Number(r.total_qty).toLocaleString('en-IN')}</td>
-                  <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)' }}>{fmtINR(r.unit_cost)}</td>
-                  <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmtINR(r.total_value)}</td>
-                </tr>
+      <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--border)' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', backgroundColor: 'var(--surface)' }}>
+          <thead>
+            <tr>
+              {COLS.map((h) => (
+                <th key={h} style={{ ...tableHeaderStyle, textAlign: ['QTY', 'MRP (₹)', 'Stock Value (₹)'].includes(h) ? 'right' : 'left' }}>{h}</th>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </tr>
+          </thead>
+          <tbody>
+            {showLoading ? (
+              <LoadingRow cols={COLS.length} />
+            ) : rows.length === 0 ? (
+              <EmptyRow cols={COLS.length} message="No stock found" />
+            ) : rows.map((r, i) => (
+              <tr key={i}>
+                <td style={{ ...tdStyle, fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px' }}>{r.sku_code}</td>
+                <td style={{ ...tdStyle, maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.sku_name}</td>
+                <td style={{ ...tdStyle, color: 'var(--text-muted)' }}>{r.brand_name}</td>
+                <td style={{ ...tdStyle, fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px' }}>{r.location_code}</td>
+                <td style={{ ...tdStyle, fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', color: 'var(--text-muted)' }}>{r.batch_number ?? '—'}</td>
+                <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{Number(r.total_qty).toLocaleString('en-IN')} {r.uom}</td>
+                <td style={{ ...tdStyle, color: 'var(--text-muted)' }}>{r.uom}</td>
+                <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)' }}>{r.mrp ? fmtINR(r.mrp) : '—'}</td>
+                <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmtINR(r.total_value)}</td>
+              </tr>
+            ))}
+          </tbody>
+          {rows.length > 0 && data && (
+            <tfoot>
+              <tr style={{ backgroundColor: 'var(--surface-sunken)' }}>
+                <td colSpan={5} style={{ ...tdStyle, fontWeight: 600 }}>Total</td>
+                <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                  {rows.reduce((s, r) => s + Number(r.total_qty), 0).toLocaleString('en-IN')}
+                </td>
+                <td colSpan={2} />
+                <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                  {fmtINR(data.grand_total_value)}
+                </td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
     </div>
   );
 }
 
 // ── Tab 2: Movement History ────────────────────────────────────────────────
 
-interface MovementItem {
+interface MovementRow {
   id: string;
-  skuCode: string;
-  skuName: string;
-  fromLocationCode: string | null;
-  toLocationCode: string | null;
-  qty: number;
-  movementType: string;
-  reference: string | null;
-  createdAt: string;
-  createdBy: string;
+  sku_code: string;
+  sku_name: string;
+  from_location_code: string | null;
+  to_location_code: string | null;
+  quantity: number;
+  movement_type: string;
+  reference_type: string | null;
+  created_at: string;
+  user_name: string | null;
 }
 
-interface PaginatedMovements {
-  items: MovementItem[];
-  total: number;
-  page: number;
-  pageSize: number;
+interface MovementsResponse {
+  data: MovementRow[];
+  meta: { page: number; limit: number; total: number; pages: number };
+}
+
+function defaultDateRange() {
+  const to = new Date();
+  const from = new Date();
+  from.setDate(from.getDate() - 7);
+  return {
+    from: from.toISOString().slice(0, 10),
+    to: to.toISOString().slice(0, 10),
+  };
 }
 
 function MovementHistoryTab() {
-  const [skuSearch, setSkuSearch] = useState('');
+  const defaults = defaultDateRange();
+  const [skuCode, setSkuCode] = useState('');
   const [movementType, setMovementType] = useState('');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
+  const [fromDate, setFromDate] = useState(defaults.from);
+  const [toDate, setToDate] = useState(defaults.to);
   const [page, setPage] = useState(1);
-  const PAGE_SIZE = 50;
+  const LIMIT = 50;
 
   const params = new URLSearchParams();
-  if (skuSearch) params.set('skuCode', skuSearch);
-  if (movementType) params.set('movementType', movementType);
-  if (fromDate) params.set('fromDate', new Date(fromDate).toISOString());
-  if (toDate) params.set('toDate', new Date(toDate + 'T23:59:59').toISOString());
+  if (skuCode.trim()) params.set('sku_code', skuCode.trim());
+  if (movementType) params.set('movement_type', movementType);
+  if (fromDate) params.set('from_date', new Date(fromDate).toISOString());
+  if (toDate) params.set('to_date', new Date(toDate + 'T23:59:59').toISOString());
   params.set('page', String(page));
-  params.set('pageSize', String(PAGE_SIZE));
+  params.set('limit', String(LIMIT));
 
-  const { data, isLoading, error } = useQuery<PaginatedMovements>({
-    queryKey: ['stock', 'movements', skuSearch, movementType, fromDate, toDate, page],
-    queryFn: () => apiClient<PaginatedMovements>(`/stock/movements?${params.toString()}`),
+  const { data, isLoading, error } = useQuery<MovementsResponse>({
+    queryKey: ['stock', 'movements', skuCode, movementType, fromDate, toDate, page],
+    queryFn: () => apiClient<MovementsResponse>(`/stock/movements?${params.toString()}`),
     staleTime: 30_000,
   });
 
-  function handleDownload() {
-    if (!data?.items.length) return;
-    const csv = toCSV(
-      data.items.map((m) => ({
-        'Date': new Date(m.createdAt).toLocaleString('en-IN'),
-        'SKU Code': m.skuCode,
-        'SKU Name': m.skuName,
-        'Type': m.movementType,
-        'Qty': m.qty,
-        'From': m.fromLocationCode ?? '',
-        'To': m.toLocationCode ?? '',
-        'Reference': m.reference ?? '',
-        'User': m.createdBy,
-      })),
-      ['Date', 'SKU Code', 'SKU Name', 'Type', 'Qty', 'From', 'To', 'Reference', 'User'],
-    );
-    downloadCSV(`movements-${new Date().toISOString().slice(0, 10)}.csv`, csv);
-  }
-
-  const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 1;
+  const rows = data?.data ?? [];
+  const totalPages = data?.meta.pages ?? 1;
 
   const MOVEMENT_TYPES = [
     'grn_receipt', 'putaway', 'pick', 'pack_confirm', 'dispatch',
@@ -267,65 +330,93 @@ function MovementHistoryTab() {
     return t.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
+  function handleDownload() {
+    if (!rows.length) return;
+    const csv = toCSV(
+      rows.map((m) => ({
+        'Date': new Date(m.created_at).toLocaleString('en-IN'),
+        'SKU Code': m.sku_code,
+        'SKU Name': m.sku_name,
+        'Type': fmtType(m.movement_type),
+        'Qty': m.quantity,
+        'From': m.from_location_code ?? '',
+        'To': m.to_location_code ?? '',
+        'User': m.user_name ?? '',
+      })),
+      ['Date', 'SKU Code', 'SKU Name', 'Type', 'Qty', 'From', 'To', 'User'],
+    );
+    downloadCSV(`movements-${new Date().toISOString().slice(0, 10)}.csv`, csv);
+  }
+
+  const COLS = ['Date', 'SKU Code', 'Name', 'Type', 'Qty', 'From → To', 'User'];
+
   return (
     <div>
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
-        <input type="search" placeholder="SKU code…" value={skuSearch} onChange={(e) => { setSkuSearch(e.target.value); setPage(1); }} style={{ ...inputStyle, minWidth: '140px' }} />
-        <select value={movementType} onChange={(e) => { setMovementType(e.target.value); setPage(1); }} style={{ ...inputStyle, minWidth: '180px' }}>
+        <input
+          type="search" placeholder="SKU code…" value={skuCode}
+          onChange={(e) => { setSkuCode(e.target.value); setPage(1); }}
+          style={{ ...inputStyle, minWidth: '140px' }}
+        />
+        <select
+          value={movementType}
+          onChange={(e) => { setMovementType(e.target.value); setPage(1); }}
+          style={{ ...inputStyle, minWidth: '180px' }}
+        >
           <option value="">All types</option>
           {MOVEMENT_TYPES.map((t) => <option key={t} value={t}>{fmtType(t)}</option>)}
         </select>
         <input type="date" value={fromDate} onChange={(e) => { setFromDate(e.target.value); setPage(1); }} style={inputStyle} />
         <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>to</span>
         <input type="date" value={toDate} onChange={(e) => { setToDate(e.target.value); setPage(1); }} style={inputStyle} />
-        {data?.items.length ? (
-          <Button variant="secondary" size="sm" onClick={handleDownload}>↓ CSV</Button>
-        ) : null}
-        {data && <span style={{ fontSize: '13px', color: 'var(--text-muted)', marginLeft: 'auto' }}>{data.total.toLocaleString('en-IN')} records</span>}
+        {rows.length > 0 && <Button variant="secondary" size="sm" onClick={handleDownload}>↓ CSV</Button>}
+        {data && <span style={{ fontSize: '13px', color: 'var(--text-muted)', marginLeft: 'auto' }}>{data.meta.total.toLocaleString('en-IN')} records</span>}
       </div>
 
-      {isLoading && <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '3rem 0' }}>Loading…</p>}
       {error && <p style={{ color: 'var(--scan-error)', textAlign: 'center' }}>Failed to load movements.</p>}
 
-      {data && (
-        <>
-          <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--border)' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', backgroundColor: 'var(--surface)' }}>
-              <thead>
-                <tr>
-                  {['Date', 'SKU', 'Name', 'Type', 'Qty', 'From → To', 'User'].map((h) => (
-                    <th key={h} style={{ ...tableHeaderStyle, textAlign: h === 'Qty' ? 'right' : 'left' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.items.length === 0 ? (
-                  <tr><td colSpan={7} style={{ ...tdStyle, textAlign: 'center', color: 'var(--text-muted)' }}>No movements found</td></tr>
-                ) : data.items.map((m) => (
-                  <tr key={m.id}>
-                    <td style={{ ...tdStyle, whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>{new Date(m.createdAt).toLocaleDateString('en-IN')}</td>
-                    <td style={{ ...tdStyle, fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', whiteSpace: 'nowrap' }}>{m.skuCode}</td>
-                    <td style={{ ...tdStyle, maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.skuName}</td>
-                    <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{fmtType(m.movementType)}</td>
-                    <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{m.qty.toLocaleString('en-IN')}</td>
-                    <td style={{ ...tdStyle, fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                      {m.fromLocationCode && m.toLocationCode ? `${m.fromLocationCode} → ${m.toLocationCode}` : (m.fromLocationCode ?? m.toLocationCode ?? '—')}
-                    </td>
-                    <td style={{ ...tdStyle, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{m.createdBy}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--border)' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', backgroundColor: 'var(--surface)' }}>
+          <thead>
+            <tr>
+              {COLS.map((h) => (
+                <th key={h} style={{ ...tableHeaderStyle, textAlign: h === 'Qty' ? 'right' : 'left' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <LoadingRow cols={COLS.length} />
+            ) : rows.length === 0 ? (
+              <EmptyRow cols={COLS.length} message="No movements found for this period" />
+            ) : rows.map((m) => (
+              <tr key={m.id}>
+                <td style={{ ...tdStyle, whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
+                  {new Date(m.created_at).toLocaleDateString('en-IN')}{' '}
+                  <span style={{ fontSize: '11px' }}>{new Date(m.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+                </td>
+                <td style={{ ...tdStyle, fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', whiteSpace: 'nowrap' }}>{m.sku_code}</td>
+                <td style={{ ...tdStyle, maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.sku_name}</td>
+                <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{fmtType(m.movement_type)}</td>
+                <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{Number(m.quantity).toLocaleString('en-IN')}</td>
+                <td style={{ ...tdStyle, fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                  {m.from_location_code && m.to_location_code
+                    ? `${m.from_location_code} → ${m.to_location_code}`
+                    : (m.from_location_code ?? m.to_location_code ?? '—')}
+                </td>
+                <td style={{ ...tdStyle, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{m.user_name ?? '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-          {totalPages > 1 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', gap: '8px' }}>
-              <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Page {page} of {totalPages}</span>
-              <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
-            </div>
-          )}
-        </>
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', gap: '8px' }}>
+          <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
+          <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Page {page} of {totalPages}</span>
+          <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
+        </div>
       )}
     </div>
   );
@@ -350,107 +441,113 @@ interface PaginatedSOH {
 }
 
 function ExpiryReportTab() {
-  const [bucket, setBucket] = useState<'expired' | 'lt30' | 'lt60' | 'gt60'>('lt30');
+  const siteId = useSiteId();
+  const { data: sites, isLoading: sitesLoading } = useSites();
+  const [resolvedSiteId, setResolvedSiteId] = useState('');
+  useEffect(() => {
+    if (siteId) setResolvedSiteId(siteId);
+    else if (!sitesLoading && sites && sites.length > 0) {
+      const active = sites.find((s) => s.is_active) ?? sites[0];
+      setResolvedSiteId(active!.id);
+    }
+  }, [siteId, sites, sitesLoading]);
+
+  const params = new URLSearchParams({ pageSize: '500' });
+  if (resolvedSiteId) params.set('siteId', resolvedSiteId);
 
   const { data, isLoading, error } = useQuery<PaginatedSOH>({
-    queryKey: ['stock', 'on-hand', 'expiry', bucket],
-    queryFn: () => apiClient<PaginatedSOH>(`/stock/on-hand?expiryBucket=${bucket}&pageSize=500`),
+    queryKey: ['stock', 'on-hand', 'expiry-report', resolvedSiteId],
+    queryFn: () => apiClient<PaginatedSOH>(`/stock/on-hand?${params.toString()}`),
+    enabled: !!resolvedSiteId,
     staleTime: 60_000,
   });
 
-  function expiryColour(d: string | null): string {
-    if (!d) return 'inherit';
-    const days = Math.ceil((new Date(d).getTime() - Date.now()) / 86400000);
-    if (days <= 0) return 'var(--scan-error)';
-    if (days <= 30) return 'var(--scan-error)';
-    if (days <= 60) return 'var(--scan-warn, #C47700)';
-    return 'inherit';
+  const rows = data?.items ?? [];
+
+  function daysRemaining(d: string | null): number | null {
+    if (!d) return null;
+    return Math.ceil((new Date(d).getTime() - Date.now()) / 86400000);
   }
 
-  function bucketLabel(b: string) {
-    return { expired: 'Expired', lt30: '< 30 Days', lt60: '30–60 Days', gt60: '> 60 Days' }[b] ?? b;
+  function expiryColor(days: number | null): string {
+    if (days === null) return 'inherit';
+    if (days <= 0) return 'var(--scan-error)';
+    if (days <= 30) return 'var(--scan-error)';
+    if (days <= 90) return 'var(--scan-warn, #C47700)';
+    return '#0e8a4f';
   }
 
   function handleDownload() {
-    if (!data?.items.length) return;
+    if (!rows.length) return;
     const csv = toCSV(
-      data.items.map((r) => ({
+      rows.map((r) => ({
         'SKU Code': r.skuCode,
         'SKU Name': r.skuName,
         'Batch': r.batch ?? '',
         'Location': r.locationCode,
-        'Qty': r.qty,
+        'QTY': r.qty,
         'UOM': r.uom,
-        'Expiry Date': r.expiryDate ? fmtDate(r.expiryDate) : '',
-        'Days Remaining': r.expiryDate ? Math.ceil((new Date(r.expiryDate).getTime() - Date.now()) / 86400000) : '',
+        'Expiry Date': r.expiryDate ? fmtDate(r.expiryDate) : 'No expiry',
+        'Days Remaining': daysRemaining(r.expiryDate) ?? 'N/A',
       })),
-      ['SKU Code', 'SKU Name', 'Batch', 'Location', 'Qty', 'UOM', 'Expiry Date', 'Days Remaining'],
+      ['SKU Code', 'SKU Name', 'Batch', 'Location', 'QTY', 'UOM', 'Expiry Date', 'Days Remaining'],
     );
-    downloadCSV(`expiry-${bucket}-${new Date().toISOString().slice(0, 10)}.csv`, csv);
+    downloadCSV(`expiry-report-${new Date().toISOString().slice(0, 10)}.csv`, csv);
   }
+
+  const COLS = ['SKU Code', 'Name', 'Batch', 'Location', 'QTY', 'UOM', 'Expiry Date', 'Days Left'];
+  const showLoading = isLoading || (sitesLoading && !resolvedSiteId);
 
   return (
     <div>
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: '4px' }}>
-          {(['expired', 'lt30', 'lt60', 'gt60'] as const).map((b) => (
-            <button
-              key={b}
-              onClick={() => setBucket(b)}
-              style={{
-                padding: '6px 14px', fontSize: '13px', fontFamily: 'inherit', cursor: 'pointer',
-                border: '1px solid var(--border)', borderRadius: '6px',
-                backgroundColor: bucket === b ? 'var(--brand-primary)' : 'var(--surface)',
-                color: bucket === b ? '#FFF' : 'var(--text)',
-                fontWeight: bucket === b ? 600 : 400,
-              }}
-            >
-              {bucketLabel(b)}
-            </button>
-          ))}
-        </div>
-        {data?.items.length ? <Button variant="secondary" size="sm" onClick={handleDownload}>↓ CSV</Button> : null}
-        {data && <span style={{ fontSize: '13px', color: 'var(--text-muted)', marginLeft: 'auto' }}>{data.total.toLocaleString('en-IN')} lines</span>}
+        {rows.length > 0 && <Button variant="secondary" size="sm" onClick={handleDownload}>↓ CSV</Button>}
+        {data && (
+          <span style={{ fontSize: '13px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+            {data.total.toLocaleString('en-IN')} lines
+          </span>
+        )}
       </div>
 
-      {isLoading && <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '3rem 0' }}>Loading…</p>}
       {error && <p style={{ color: 'var(--scan-error)', textAlign: 'center' }}>Failed to load expiry data.</p>}
 
-      {data && (
-        <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--border)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', backgroundColor: 'var(--surface)' }}>
-            <thead>
-              <tr>
-                {['SKU Code', 'Name', 'Batch', 'Location', 'Qty', 'Expiry Date', 'Days Left'].map((h) => (
-                  <th key={h} style={{ ...tableHeaderStyle, textAlign: h === 'Qty' || h === 'Days Left' ? 'right' : 'left' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {data.items.length === 0 ? (
-                <tr><td colSpan={7} style={{ ...tdStyle, textAlign: 'center', color: 'var(--text-muted)' }}>No items in this expiry bucket</td></tr>
-              ) : data.items.map((item) => {
-                const days = item.expiryDate ? Math.ceil((new Date(item.expiryDate).getTime() - Date.now()) / 86400000) : null;
-                return (
-                  <tr key={item.id}>
-                    <td style={{ ...tdStyle, fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px' }}>{item.skuCode}</td>
-                    <td style={{ ...tdStyle, maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.skuName}</td>
-                    <td style={{ ...tdStyle, fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', color: 'var(--text-muted)' }}>{item.batch ?? '—'}</td>
-                    <td style={{ ...tdStyle, fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px' }}>{item.locationCode}</td>
-                    <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{item.qty.toLocaleString('en-IN')}</td>
-                    <td style={{ ...tdStyle, color: expiryColour(item.expiryDate), fontWeight: days !== null && days <= 30 ? 600 : 400 }}>
-                      {item.expiryDate ? fmtDate(item.expiryDate) : '—'}
-                    </td>
-                    <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: expiryColour(item.expiryDate), fontWeight: days !== null && days <= 30 ? 600 : 400 }}>
-                      {days === null ? '—' : days <= 0 ? 'Expired' : `${days}d`}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--border)' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', backgroundColor: 'var(--surface)' }}>
+          <thead>
+            <tr>
+              {COLS.map((h) => (
+                <th key={h} style={{ ...tableHeaderStyle, textAlign: ['QTY', 'Days Left'].includes(h) ? 'right' : 'left' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {showLoading ? (
+              <LoadingRow cols={COLS.length} />
+            ) : rows.length === 0 ? (
+              <EmptyRow cols={COLS.length} message="No stock on hand" />
+            ) : rows.map((item) => {
+              const days = daysRemaining(item.expiryDate);
+              const color = expiryColor(days);
+              return (
+                <tr key={item.id}>
+                  <td style={{ ...tdStyle, fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px' }}>{item.skuCode}</td>
+                  <td style={{ ...tdStyle, maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.skuName}</td>
+                  <td style={{ ...tdStyle, fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', color: 'var(--text-muted)' }}>{item.batch ?? '—'}</td>
+                  <td style={{ ...tdStyle, fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px' }}>{item.locationCode}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{item.qty.toLocaleString('en-IN')}</td>
+                  <td style={{ ...tdStyle, color: 'var(--text-muted)' }}>{item.uom}</td>
+                  <td style={{ ...tdStyle, color, fontWeight: days !== null && days <= 30 ? 600 : 400 }}>
+                    {item.expiryDate ? fmtDate(item.expiryDate) : <span style={{ color: 'var(--text-muted)' }}>No expiry</span>}
+                  </td>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color, fontWeight: days !== null && days <= 30 ? 600 : 400 }}>
+                    {days === null ? <span style={{ color: 'var(--text-muted)' }}>—</span> : days <= 0 ? 'Expired' : `${days}d`}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -460,12 +557,12 @@ function ExpiryReportTab() {
 interface BrandRow {
   brand: string;
   qty: number;
-  skuCount?: number;
+  skuCount: number;
+  totalValue: number;
 }
 
 interface DashboardStats {
   brandStock: BrandRow[];
-  top10Skus: { skuCode: string; skuName: string; qty: number; value: number }[];
 }
 
 function BrandSummaryTab() {
@@ -475,64 +572,91 @@ function BrandSummaryTab() {
     staleTime: 120_000,
   });
 
+  const rows = data?.brandStock ?? [];
+  const totalQty = rows.reduce((s, b) => s + b.qty, 0);
+  const totalValue = rows.reduce((s, b) => s + (b.totalValue ?? 0), 0);
+
   function handleDownload() {
-    if (!data?.brandStock.length) return;
-    const total = data.brandStock.reduce((s, b) => s + b.qty, 0);
+    if (!rows.length) return;
     const csv = toCSV(
-      data.brandStock.map((b) => ({
+      rows.map((b) => ({
         'Brand': b.brand,
-        'Total Qty': b.qty,
-        'Share %': total > 0 ? ((b.qty / total) * 100).toFixed(1) : '0',
+        'SKU Count': b.skuCount ?? '',
+        'Total QTY': b.qty,
+        'Total Value (INR)': b.totalValue ?? '',
+        'Share %': totalQty > 0 ? ((b.qty / totalQty) * 100).toFixed(1) : '0',
       })),
-      ['Brand', 'Total Qty', 'Share %'],
+      ['Brand', 'SKU Count', 'Total QTY', 'Total Value (INR)', 'Share %'],
     );
     downloadCSV(`brand-summary-${new Date().toISOString().slice(0, 10)}.csv`, csv);
   }
 
-  const total = data?.brandStock.reduce((s, b) => s + b.qty, 0) ?? 0;
+  const COLS = ['Brand', 'SKU Count', 'Total QTY', 'Total Value (₹)', 'Share', 'Bar'];
 
   return (
     <div>
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '16px' }}>
-        {data?.brandStock.length ? <Button variant="secondary" size="sm" onClick={handleDownload}>↓ CSV</Button> : null}
-        {data && <span style={{ fontSize: '13px', color: 'var(--text-muted)', marginLeft: 'auto' }}>{data.brandStock.length} brands, {total.toLocaleString('en-IN')} units total</span>}
+        {rows.length > 0 && <Button variant="secondary" size="sm" onClick={handleDownload}>↓ CSV</Button>}
+        {data && (
+          <span style={{ fontSize: '13px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+            {rows.length} brands · {totalQty.toLocaleString('en-IN')} units · {fmtINR(totalValue)}
+          </span>
+        )}
       </div>
 
-      {isLoading && <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '3rem 0' }}>Loading…</p>}
       {error && <p style={{ color: 'var(--scan-error)', textAlign: 'center' }}>Failed to load brand data.</p>}
 
-      {data && (
-        <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--border)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', backgroundColor: 'var(--surface)' }}>
-            <thead>
-              <tr>
-                {['Brand', 'Total Qty', 'Share', 'Bar'].map((h) => (
-                  <th key={h} style={{ ...tableHeaderStyle, textAlign: h === 'Total Qty' || h === 'Share' ? 'right' : 'left' }}>{h}</th>
-                ))}
+      <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--border)' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', backgroundColor: 'var(--surface)' }}>
+          <thead>
+            <tr>
+              {COLS.map((h) => (
+                <th key={h} style={{ ...tableHeaderStyle, textAlign: ['Total QTY', 'Total Value (₹)', 'Share', 'SKU Count'].includes(h) ? 'right' : 'left' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <LoadingRow cols={COLS.length} />
+            ) : rows.length === 0 ? (
+              <EmptyRow cols={COLS.length} message="No brand data" />
+            ) : rows.map((b, i) => {
+              const pct = totalQty > 0 ? (b.qty / totalQty) * 100 : 0;
+              return (
+                <tr key={i}>
+                  <td style={{ ...tdStyle, fontWeight: 600 }}>{b.brand}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)' }}>{(b.skuCount ?? 0).toLocaleString('en-IN')}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.qty.toLocaleString('en-IN')}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtINR(b.totalValue ?? 0)}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(1)}%</td>
+                  <td style={{ ...tdStyle, width: '200px', minWidth: '120px' }}>
+                    <div style={{ height: '16px', backgroundColor: 'var(--surface-sunken)', borderRadius: '4px', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${pct}%`, backgroundColor: 'var(--brand-primary)', borderRadius: '4px' }} />
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          {rows.length > 0 && (
+            <tfoot>
+              <tr style={{ backgroundColor: 'var(--surface-sunken)' }}>
+                <td style={{ ...tdStyle, fontWeight: 600 }}>Total</td>
+                <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                  {rows.reduce((s, b) => s + (b.skuCount ?? 0), 0).toLocaleString('en-IN')}
+                </td>
+                <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                  {totalQty.toLocaleString('en-IN')}
+                </td>
+                <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                  {fmtINR(totalValue)}
+                </td>
+                <td colSpan={2} />
               </tr>
-            </thead>
-            <tbody>
-              {data.brandStock.length === 0 ? (
-                <tr><td colSpan={4} style={{ ...tdStyle, textAlign: 'center', color: 'var(--text-muted)' }}>No brand data</td></tr>
-              ) : data.brandStock.map((b, i) => {
-                const pct = total > 0 ? (b.qty / total) * 100 : 0;
-                return (
-                  <tr key={i}>
-                    <td style={{ ...tdStyle, fontWeight: 600 }}>{b.brand}</td>
-                    <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.qty.toLocaleString('en-IN')}</td>
-                    <td style={{ ...tdStyle, textAlign: 'right', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(1)}%</td>
-                    <td style={{ ...tdStyle, width: '200px', minWidth: '120px' }}>
-                      <div style={{ height: '16px', backgroundColor: 'var(--surface-sunken)', borderRadius: '4px', overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${pct}%`, backgroundColor: 'var(--brand-primary)', borderRadius: '4px' }} />
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </tfoot>
+          )}
+        </table>
+      </div>
     </div>
   );
 }

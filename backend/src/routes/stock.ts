@@ -281,6 +281,7 @@ router.get(
       page: number;
       limit: number;
       sku_id?: string;
+      sku_code?: string;
       location_id?: string;
       movement_type?: string;
       from_date?: string;
@@ -294,6 +295,10 @@ router.get(
     if (q.sku_id) {
       conditions.push(`sm.sku_id = $${idx++}`);
       params.push(q.sku_id);
+    }
+    if (q.sku_code) {
+      conditions.push(`s.code ILIKE $${idx++}`);
+      params.push(`%${q.sku_code}%`);
     }
     if (q.location_id) {
       conditions.push(
@@ -315,6 +320,12 @@ router.get(
       params.push(q.to_date);
     }
 
+    const joinClause = `FROM stock_movements sm
+         JOIN skus      s  ON s.id  = sm.sku_id
+         LEFT JOIN batches   b  ON b.id  = sm.batch_id
+         LEFT JOIN locations fl ON fl.id = sm.from_location_id
+         LEFT JOIN locations tl ON tl.id = sm.to_location_id
+         LEFT JOIN users     u  ON u.id  = sm.user_id`;
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const offset = (q.page - 1) * q.limit;
 
@@ -328,18 +339,13 @@ router.get(
            fl.code AS from_location_code,
            tl.code AS to_location_code,
            u.name  AS user_name
-         FROM stock_movements sm
-         JOIN skus      s  ON s.id  = sm.sku_id
-         LEFT JOIN batches   b  ON b.id  = sm.batch_id
-         LEFT JOIN locations fl ON fl.id = sm.from_location_id
-         LEFT JOIN locations tl ON tl.id = sm.to_location_id
-         LEFT JOIN users     u  ON u.id  = sm.user_id
+         ${joinClause}
          ${where}
          ORDER BY sm.created_at DESC
          LIMIT $${idx++} OFFSET $${idx++}`,
         [...params, q.limit, offset],
       ),
-      pool.query(`SELECT COUNT(*) AS total FROM stock_movements sm ${where}`, params),
+      pool.query(`SELECT COUNT(*) AS total ${joinClause} ${where}`, params),
     ]);
 
     const total = Number(countResult.rows[0]?.total ?? 0);

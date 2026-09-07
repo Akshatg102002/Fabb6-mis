@@ -65,9 +65,13 @@ router.get('/stats', requireAuth, async (_req, res) => {
       LIMIT 10
     `),
 
-    pool.query<{ brand: string; qty: string }>(`
+    pool.query<{ brand: string; qty: string; sku_count: string; total_value: string }>(`
       WITH ${LEDGER_CTE}
-      SELECT COALESCE(br.name, 'Unbranded') AS brand, SUM(l.qty)::bigint AS qty
+      SELECT
+        COALESCE(br.name, 'Unbranded')                              AS brand,
+        SUM(l.qty)::bigint                                          AS qty,
+        COUNT(DISTINCT l.sku_id)::bigint                            AS sku_count,
+        SUM(l.qty * COALESCE(s.standard_cost::numeric, 0))         AS total_value
       FROM ledger l
       JOIN skus s ON s.id = l.sku_id
       LEFT JOIN brands br ON br.id = s.brand_id
@@ -104,6 +108,8 @@ router.get('/stats', requireAuth, async (_req, res) => {
     brandStock: brandStockResult.rows.map((r) => ({
       brand: r.brand,
       qty: Number(r.qty),
+      skuCount: Number(r.sku_count),
+      totalValue: Number(r.total_value),
     })),
     recentActivity: recentActivityResult.rows.map((r) => ({
       id: r.id as string,
