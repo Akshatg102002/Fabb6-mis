@@ -15,11 +15,12 @@ import {
   FileText,
   Home as HomeIcon,
   MapPin,
+  Menu,
   Package,
   RotateCcw,
   Settings as SettingsIcon,
   ShoppingCart,
-  ShoppingBag,
+  Truck,
 } from 'lucide-react';
 import { SyncStatusBar } from './SyncStatusBar';
 import { useSessionStore, type UserRole } from '@/stores/sessionStore';
@@ -32,6 +33,7 @@ export interface DeskLayoutProps {
   title?: string;
   breadcrumbs?: { label: string; to?: string }[];
   toolbar?: ReactNode;
+  footer?: ReactNode;
   children: ReactNode;
 }
 
@@ -60,15 +62,15 @@ const NAV_SECTIONS: NavSection[] = [
         roles: ['picker', 'packer', 'inward', 'returns', 'supervisor', 'admin', 'read_only'],
       },
       {
-        label: 'Purchase Orders',
-        to: '/inward/purchase-orders',
-        icon: ShoppingBag,
-        roles: ['inward', 'supervisor', 'admin'],
-      },
-      {
         label: 'GRN / Receiving',
         to: '/inward',
         icon: ArrowDownToLine,
+        roles: ['inward', 'supervisor', 'admin'],
+      },
+      {
+        label: 'Vendors',
+        to: '/vendors',
+        icon: Truck,
         roles: ['inward', 'supervisor', 'admin'],
       },
       {
@@ -170,6 +172,7 @@ export function DeskLayout({
   title,
   breadcrumbs,
   toolbar,
+  footer,
   children,
 }: DeskLayoutProps) {
   const user = useSessionStore((s) => s.user);
@@ -622,6 +625,28 @@ export function DeskLayout({
             borderBottom: '1px solid var(--border)',
           }}
         >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+            {isMobile && (
+              <button
+                onClick={toggle}
+                aria-label="Open navigation"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border)',
+                  background: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--text-muted)',
+                  flexShrink: 0,
+                }}
+              >
+                <Menu size={20} />
+              </button>
+            )}
           <div style={{ minWidth: 0 }}>
             {breadcrumbs && breadcrumbs.length > 0 && (
               <nav aria-label="Breadcrumb" style={{ marginBottom: '2px' }}>
@@ -683,6 +708,7 @@ export function DeskLayout({
             </h1>
           </div>
 
+          </div>
           {toolbar && (
             <div
               style={{
@@ -709,6 +735,18 @@ export function DeskLayout({
           {children}
         </main>
 
+        {footer && (
+          <div
+            style={{
+              flexShrink: 0,
+              borderTop: '1px solid var(--border)',
+              backgroundColor: '#FFFFFF',
+              padding: '12px 16px',
+            }}
+          >
+            {footer}
+          </div>
+        )}
         <SyncStatusBar />
       </div>
     </div>

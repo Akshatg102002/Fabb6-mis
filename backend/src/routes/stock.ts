@@ -645,17 +645,62 @@ router.get(
     const client = await pool.connect();
     try {
       const result = await client.query(
-        `SELECT
-           sa.sku_id,
-           sa.site_id,
-           s.code  AS sku_code,
-           s.name  AS sku_name,
-           sa.physical_stock,
-           sa.committed_stock,
-           sa.available_to_sell,
-           sa.damaged_stock
-         FROM stock_availability sa
-         JOIN skus s ON s.id = sa.sku_id
+        `WITH ledger AS (
+           SELECT sku_id, to_location_id AS location_id, quantity
+             FROM stock_movements WHERE to_location_id IS NOT NULL
+           UNION ALL
+           SELECT sku_id, from_location_id AS location_id, -quantity
+             FROM stock_movements WHERE from_location_id IS NOT NULL
+         ),
+         soh AS (
+           SELECT sku_id, location_id, SUM(quantity) AS quantity
+             FROM ledger
+            GROUP BY sku_id, location_id
+           HAVING SUM(quantity) > 0
+         ),
+         physical AS (
+           SELECT soh.sku_id, l.site_id, SUM(soh.quantity) AS physical_stock
+             FROM soh
+             JOIN locations l ON l.id = soh.location_id
+            WHERE l.location_type != 'quarantine'
+            GROUP BY soh.sku_id, l.site_id
+         ),
+         committed AS (
+           SELECT sku_id, SUM(required_qty - COALESCE(picked_qty, 0)) AS committed_stock
+             FROM pick_lines
+            WHERE status = 'open'
+            GROUP BY sku_id
+         ),
+         damaged AS (
+           SELECT soh.sku_id, l.site_id, SUM(soh.quantity) AS damaged_stock
+             FROM soh
+             JOIN locations l ON l.id = soh.location_id
+            WHERE l.location_type = 'quarantine'
+            GROUP BY soh.sku_id, l.site_id
+         ),
+         avail AS (
+           SELECT
+             COALESCE(p.sku_id, d.sku_id) AS sku_id,
+             COALESCE(p.site_id, d.site_id) AS site_id,
+             COALESCE(p.physical_stock, 0) AS physical_stock,
+             COALESCE(c.committed_stock, 0) AS committed_stock,
+             GREATEST(0, COALESCE(p.physical_stock, 0) - COALESCE(c.committed_stock, 0)) AS available_to_sell,
+             COALESCE(d.damaged_stock, 0) AS damaged_stock
+             FROM physical p
+             FULL OUTER JOIN damaged d ON p.sku_id = d.sku_id AND p.site_id = d.site_id
+             LEFT JOIN committed c ON COALESCE(p.sku_id, d.sku_id) = c.sku_id
+         )
+         SELECT
+           a.sku_id,
+           a.site_id,
+           s.code AS sku_code,
+           s.name AS sku_name,
+           a.physical_stock,
+           a.committed_stock,
+           a.available_to_sell,
+           a.damaged_stock
+           FROM avail a
+           JOIN skus s ON s.id = a.sku_id
          ${where}
          ORDER BY s.code`,
         params,

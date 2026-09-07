@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { FloorLayout } from '@/components/layout/FloorLayout';
+import { DeskLayout } from '@/components/layout/DeskLayout';
 import { ScanResult } from '@/components/scan/ScanResult';
 import { ManualEntry } from '@/components/scan/ManualEntry';
 import { Button } from '@/components/ui/Button';
@@ -102,9 +102,9 @@ export default function Putaway() {
   const { submitManual } = useScanner(handleScan, { disabled: loading || step === 'confirming' });
 
   return (
-    <FloorLayout
+    <DeskLayout
       heading="Putaway"
-      backTo="/home"
+      breadcrumbs={[{ label: 'Home', to: '/home' }, { label: 'Putaway' }]}
       footer={
         toteData && step === 'scan-bin' ? (
           <Button variant="ghost" size="lg" fullWidth onClick={reset}>
@@ -208,6 +208,6 @@ export default function Putaway() {
           />
         )}
       </div>
-    </FloorLayout>
+    </DeskLayout>
   );
 }

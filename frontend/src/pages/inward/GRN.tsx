@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FloorLayout } from '@/components/layout/FloorLayout';
+import { DeskLayout } from '@/components/layout/DeskLayout';
 import { Button } from '@/components/ui/Button';
 import { useGRNList, type GRN as GRNType, type GRNStatus } from '@/api/queries/grn';
 import { apiClient } from '@/api/client';
@@ -106,9 +106,9 @@ export default function GRN() {
   }
 
   return (
-    <FloorLayout
+    <DeskLayout
       heading="Receive (GRN)"
-      backTo="/home"
+      breadcrumbs={[{ label: 'Home', to: '/home' }, { label: 'Receive (GRN)' }]}
       footer={
         <Button
           variant="secondary"
@@ -216,6 +216,6 @@ export default function GRN() {
           />
         ))}
       </div>
-    </FloorLayout>
+    </DeskLayout>
   );
 }

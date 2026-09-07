@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { FloorLayout } from '@/components/layout/FloorLayout';
+import { DeskLayout } from '@/components/layout/DeskLayout';
 import { ScanResult } from '@/components/scan/ScanResult';
 import { ManualEntry } from '@/components/scan/ManualEntry';
 import { Button } from '@/components/ui/Button';
@@ -137,9 +137,9 @@ export default function PackOrder() {
   const allPacked = order?.lines.every((l) => l.scanned >= l.qty) ?? false;
 
   return (
-    <FloorLayout
+    <DeskLayout
       heading="Pack Order"
-      backTo="/home"
+      breadcrumbs={[{ label: 'Home', to: '/home' }, { label: 'Pack Order' }]}
       footer={
         step === 'enter-weight' ? (
           <Button
@@ -263,6 +263,6 @@ export default function PackOrder() {
           </div>
         )}
       </div>
-    </FloorLayout>
+    </DeskLayout>
   );
 }

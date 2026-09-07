@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { FloorLayout } from '@/components/layout/FloorLayout';
+import { DeskLayout } from '@/components/layout/DeskLayout';
 import { ScanResult } from '@/components/scan/ScanResult';
 import { ManualEntry } from '@/components/scan/ManualEntry';
 import { Button } from '@/components/ui/Button';
@@ -156,12 +156,12 @@ export default function ReturnInward() {
   const currentItem = returnOrder?.items[currentItemIdx];
 
   return (
-    <FloorLayout
+    <DeskLayout
       heading="Returns Inward"
-      backTo="/home"
-      headerRight={
+      breadcrumbs={[{ label: 'Home', to: '/home' }, { label: 'Returns Inward' }]}
+      toolbar={
         returnOrder ? (
-          <span style={{ fontSize: '0.875rem', opacity: 0.75 }}>
+          <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
             {currentItemIdx + 1}/{returnOrder.items.length}
           </span>
         ) : undefined
@@ -300,6 +300,6 @@ export default function ReturnInward() {
           />
         )}
       </div>
-    </FloorLayout>
+    </DeskLayout>
   );
 }

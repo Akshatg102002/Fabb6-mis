@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
-import { FloorLayout, FloorQuantity } from '@/components/layout/FloorLayout';
+import { FloorQuantity } from '@/components/layout/FloorLayout';
+import { DeskLayout } from '@/components/layout/DeskLayout';
 import { ScanResult } from '@/components/scan/ScanResult';
 import { ManualEntry } from '@/components/scan/ManualEntry';
 import { Button } from '@/components/ui/Button';
@@ -116,10 +117,9 @@ export default function CycleCount() {
   }
 
   return (
-    <FloorLayout
-      heading="Cycle Count"
-      subheading={assignment ? assignment.locationCode : undefined}
-      backTo="/home"
+    <DeskLayout
+      heading={assignment ? assignment.locationCode : 'Cycle Count'}
+      breadcrumbs={[{ label: 'Home', to: '/home' }, { label: 'Cycle Count' }]}
       footer={
         step === 'counting' && scannedItems.length > 0 ? (
           <Button
@@ -283,6 +283,6 @@ export default function CycleCount() {
           </div>
         )}
       </div>
-    </FloorLayout>
+    </DeskLayout>
   );
 }

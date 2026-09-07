@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { FloorLayout } from '@/components/layout/FloorLayout';
+import { DeskLayout } from '@/components/layout/DeskLayout';
 import { ScanResult } from '@/components/scan/ScanResult';
 import { ManualEntry } from '@/components/scan/ManualEntry';
 import { Button } from '@/components/ui/Button';
@@ -100,29 +100,28 @@ export default function ReceiveItem() {
 
   if (isLoading) {
     return (
-      <FloorLayout heading="Receive Item" backTo="/inward">
+      <DeskLayout heading="Receive Item" breadcrumbs={[{ label: 'Inward', to: '/inward' }, { label: 'Receive Item' }]}>
         <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
           Loading GRN…
         </div>
-      </FloorLayout>
+      </DeskLayout>
     );
   }
 
   if (!grn) {
     return (
-      <FloorLayout heading="Receive Item" backTo="/inward">
+      <DeskLayout heading="Receive Item" breadcrumbs={[{ label: 'Inward', to: '/inward' }, { label: 'Receive Item' }]}>
         <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--scan-error)' }}>
           GRN not found
         </div>
-      </FloorLayout>
+      </DeskLayout>
     );
   }
 
   return (
-    <FloorLayout
+    <DeskLayout
       heading="Receive Item"
-      subheading={grn.reference}
-      backTo="/inward"
+      breadcrumbs={[{ label: 'Inward', to: '/inward' }, { label: grn.reference }]}
       footer={
         step === 'confirm' ? (
           <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -336,6 +335,6 @@ export default function ReceiveItem() {
           </div>
         )}
       </div>
-    </FloorLayout>
+    </DeskLayout>
   );
 }

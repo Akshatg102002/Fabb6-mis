@@ -21,6 +21,7 @@ const StockOnHand = lazy(() => import('@/pages/stock/StockOnHand'));
 const Settings = lazy(() => import('@/pages/settings/Settings'));
 const PurchaseOrders = lazy(() => import('@/pages/inward/PurchaseOrders'));
 const CreatePO = lazy(() => import('@/pages/inward/CreatePO'));
+const Vendors = lazy(() => import('@/pages/vendors/Vendors'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -127,6 +128,9 @@ export default function App() {
                       {/* Returns */}
                       <Route path="/returns" element={<ReturnInward />} />
                       <Route path="/returns/:returnId" element={<ReturnInward />} />
+
+                      {/* Vendors */}
+                      <Route path="/vendors" element={<Vendors />} />
 
                       {/* Stock */}
                       <Route path="/stock" element={<StockOnHand />} />

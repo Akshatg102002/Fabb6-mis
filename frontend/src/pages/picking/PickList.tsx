@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
-import { FloorLayout, FloorQuantity } from '@/components/layout/FloorLayout';
+import { FloorQuantity } from '@/components/layout/FloorLayout';
+import { DeskLayout } from '@/components/layout/DeskLayout';
 import { ScanResult } from '@/components/scan/ScanResult';
 import { ManualEntry } from '@/components/scan/ManualEntry';
 import { Button } from '@/components/ui/Button';
@@ -195,7 +196,7 @@ export default function PickList() {
   // No active list yet — show list picker
   if (!activeListId) {
     return (
-      <FloorLayout heading="Pick Lists" backTo="/home">
+      <DeskLayout heading="Pick Lists" breadcrumbs={[{ label: 'Home', to: '/home' }, { label: 'Pick Lists' }]}>
         <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {listsLoading && (
             <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem 0' }}>Loading…</p>
@@ -235,17 +236,16 @@ export default function PickList() {
             </button>
           ))}
         </div>
-      </FloorLayout>
+      </DeskLayout>
     );
   }
 
   return (
-    <FloorLayout
+    <DeskLayout
       heading="Picking"
-      subheading={pickList?.reference}
-      backTo={undefined}
-      headerRight={
-        <span style={{ fontSize: '0.875rem', opacity: 0.75 }}>
+      breadcrumbs={[{ label: 'Pick Lists', to: '/pick' }, { label: pickList?.reference ?? 'Active List' }]}
+      toolbar={
+        <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
           {lineIndex + 1} / {pickList?.lines.length ?? '?'}
         </span>
       }
@@ -383,6 +383,6 @@ export default function PickList() {
           </div>
         )}
       </div>
-    </FloorLayout>
+    </DeskLayout>
   );
 }
