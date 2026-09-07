@@ -1,13 +1,20 @@
 import { z } from 'zod';
 
 export const stockQuerySchema = z.object({
+  // UUID-based filters (internal / direct API)
   sku_id: z.string().uuid().optional(),
   location_id: z.string().uuid().optional(),
   batch_id: z.string().uuid().optional(),
   site_id: z.string().uuid().optional(),
+  // Text-search filters (frontend-facing camelCase)
+  skuSearch: z.string().max(200).optional(),
+  locationId: z.string().max(200).optional(), // location code text search
+  siteId: z.string().uuid().optional(),
+  expiryBucket: z.enum(['expired', 'lt30', 'lt60', 'gt60']).optional(),
   include_empty: z.coerce.boolean().default(false),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().min(1).max(500).default(50),
+  pageSize: z.coerce.number().int().min(1).max(500).optional(),
 });
 
 export const movementQuerySchema = z.object({

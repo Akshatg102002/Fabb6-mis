@@ -148,13 +148,19 @@ router.get(
     const q = req.query as unknown as {
       page: number;
       limit: number;
+      pageSize?: number;
       site_id?: string;
+      siteId?: string;
       sku_id?: string;
+      skuSearch?: string;
       location_id?: string;
+      locationId?: string;
       batch_id?: string;
       include_empty: boolean;
+      expiryBucket?: 'expired' | 'lt30' | 'lt60' | 'gt60';
     };
 
+    const pageSize = q.pageSize ?? q.limit;
     const conditions: string[] = [];
     const params: unknown[] = [];
     let idx = 1;
@@ -163,23 +169,44 @@ router.get(
       conditions.push(`soh.sku_id = $${idx++}`);
       params.push(q.sku_id);
     }
+    if (q.skuSearch) {
+      conditions.push(`(s.code ILIKE $${idx} OR s.name ILIKE $${idx})`);
+      params.push(`%${q.skuSearch}%`);
+      idx++;
+    }
     if (q.location_id) {
       conditions.push(`soh.location_id = $${idx++}`);
       params.push(q.location_id);
+    }
+    if (q.locationId) {
+      conditions.push(`l.code ILIKE $${idx++}`);
+      params.push(`%${q.locationId}%`);
     }
     if (q.batch_id) {
       conditions.push(`soh.batch_id = $${idx++}`);
       params.push(q.batch_id);
     }
-    if (q.site_id) {
+    const resolvedSiteId = q.siteId ?? q.site_id;
+    if (resolvedSiteId) {
       conditions.push(`l.site_id = $${idx++}`);
-      params.push(q.site_id);
+      params.push(resolvedSiteId);
+    }
+
+    // Expiry bucket filter applied after joins
+    if (q.expiryBucket === 'expired') {
+      conditions.push(`b.expiry_date < CURRENT_DATE`);
+    } else if (q.expiryBucket === 'lt30') {
+      conditions.push(`b.expiry_date >= CURRENT_DATE AND b.expiry_date < CURRENT_DATE + INTERVAL '30 days'`);
+    } else if (q.expiryBucket === 'lt60') {
+      conditions.push(`b.expiry_date >= CURRENT_DATE + INTERVAL '30 days' AND b.expiry_date < CURRENT_DATE + INTERVAL '60 days'`);
+    } else if (q.expiryBucket === 'gt60') {
+      conditions.push(`b.expiry_date >= CURRENT_DATE + INTERVAL '60 days'`);
     }
 
     // When include_empty is false, restrict the ledger CTE to positive balances only
     const having = q.include_empty ? '' : 'HAVING SUM(quantity) > 0';
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const offset = (q.page - 1) * q.limit;
+    const offset = (q.page - 1) * pageSize;
 
     // stock_on_hand derived inline: inbound (+) to to_location, outbound (-) from from_location
     const sohCte = `
@@ -198,18 +225,21 @@ router.get(
       pool.query(
         `${sohCte}
          SELECT
-           soh.sku_id,
-           soh.batch_id,
-           soh.location_id,
-           soh.quantity,
-           s.code       AS sku_code,
-           s.name       AS sku_name,
+           soh.sku_id || '|' || COALESCE(soh.batch_id::text, 'null') || '|' || soh.location_id AS id,
+           soh.sku_id        AS "skuId",
+           soh.batch_id      AS "batchId",
+           soh.location_id   AS "locationId",
+           soh.quantity      AS qty,
+           s.code            AS "skuCode",
+           s.name            AS "skuName",
            s.uom,
-           b.batch_number,
-           b.expiry_date,
-           l.code       AS location_code,
-           l.type       AS location_type,
-           l.site_id
+           NULL::numeric     AS "costPrice",
+           NULL::numeric     AS value,
+           b.batch_number    AS batch,
+           b.expiry_date     AS "expiryDate",
+           l.code            AS "locationCode",
+           l.type            AS "locationType",
+           l.site_id         AS "siteId"
          FROM soh
          JOIN skus      s ON s.id = soh.sku_id
          LEFT JOIN batches   b ON b.id = soh.batch_id
@@ -217,12 +247,14 @@ router.get(
          ${where}
          ORDER BY s.code, l.code
          LIMIT $${idx++} OFFSET $${idx++}`,
-        [...params, q.limit, offset],
+        [...params, pageSize, offset],
       ),
       pool.query(
         `${sohCte}
          SELECT COUNT(*) AS total
          FROM soh
+         JOIN skus      s ON s.id = soh.sku_id
+         LEFT JOIN batches   b ON b.id = soh.batch_id
          JOIN locations l ON l.id = soh.location_id
          ${where}`,
         params,
@@ -231,8 +263,10 @@ router.get(
 
     const total = Number(countResult.rows[0]?.total ?? 0);
     res.json({
-      data: dataResult.rows,
-      meta: { page: q.page, limit: q.limit, total, pages: Math.ceil(total / q.limit) },
+      items: dataResult.rows,
+      total,
+      page: q.page,
+      pageSize,
     });
   },
 );
