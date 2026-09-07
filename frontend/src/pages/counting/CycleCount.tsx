@@ -6,6 +6,7 @@ import { ManualEntry } from '@/components/scan/ManualEntry';
 import { Button } from '@/components/ui/Button';
 import { useScanner } from '@/hooks/useScanner';
 import { useAudio } from '@/hooks/useAudio';
+import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/api/client';
 
 type Step = 'idle' | 'counting' | 'submitting' | 'done';
@@ -24,6 +25,23 @@ interface ScannedItem {
   qty: number;
 }
 
+interface ScheduledCount {
+  id: string;
+  count_number: string;
+  status: string;
+  scheduled_date: string | null;
+  created_at: string;
+  site_id: string;
+}
+
+const COUNT_STATUS_COLORS: Record<string, { color: string; bg: string }> = {
+  scheduled: { color: '#0B4F9C', bg: '#E8F0FB' },
+  in_progress: { color: '#C77700', bg: '#FFF7E6' },
+  pending_review: { color: '#7B3FF3', bg: '#F0E6FF' },
+  completed: { color: '#0E8A4F', bg: '#E8F7F0' },
+  cancelled: { color: '#5A6884', bg: '#F5F7FA' },
+};
+
 export default function CycleCount() {
   const [step, setStep] = useState<Step>('idle');
   const [assignment, setAssignment] = useState<CountAssignment | null>(null);
@@ -31,8 +49,16 @@ export default function CycleCount() {
   const [scanStatus, setScanStatus] = useState<ScanStatus>('idle');
   const [scanMessage, setScanMessage] = useState('Load your assigned count location');
   const [loading, setLoading] = useState(false);
+  const [showCounts, setShowCounts] = useState(true);
 
   const { reject } = useAudio();
+
+  const { data: scheduledCounts } = useQuery<{ data: ScheduledCount[] }>({
+    queryKey: ['cycle-counts', 'open'],
+    queryFn: () => apiClient<{ data: ScheduledCount[] }>('/cycle-counts?status=scheduled&limit=20'),
+    staleTime: 30_000,
+    enabled: step === 'idle',
+  });
 
   async function loadAssignment() {
     setLoading(true);
@@ -149,6 +175,54 @@ export default function CycleCount() {
       }
     >
       <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {/* Scheduled counts table */}
+        {step === 'idle' && scheduledCounts && scheduledCounts.data.length > 0 && (
+          <div style={{ backgroundColor: '#FFFFFF', border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden' }}>
+            <button
+              onClick={() => setShowCounts((v) => !v)}
+              style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text)' }}>
+                Scheduled Counts ({scheduledCounts.data.length})
+              </span>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{showCounts ? '▲ Hide' : '▼ Show'}</span>
+            </button>
+            {showCounts && (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: 'var(--surface-sunken)', borderTop: '1px solid var(--border)' }}>
+                      {['Count #', 'Scheduled Date', 'Status'].map((h) => (
+                        <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scheduledCounts.data.map((c) => {
+                      const sc = COUNT_STATUS_COLORS[c.status] ?? COUNT_STATUS_COLORS['scheduled']!;
+                      return (
+                        <tr key={c.id} style={{ borderTop: '1px solid var(--border)' }}>
+                          <td style={{ padding: '8px 12px', fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', whiteSpace: 'nowrap' }}>{c.count_number}</td>
+                          <td style={{ padding: '8px 12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                            {c.scheduled_date ? new Date(c.scheduled_date).toLocaleDateString('en-IN') : '—'}
+                          </td>
+                          <td style={{ padding: '8px 12px' }}>
+                            <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600, color: sc.color, backgroundColor: sc.bg }}>
+                              {c.status.replace('_', ' ')}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
         <ScanResult status={scanStatus} message={scanMessage} />
 
         {/* Load assignment */}

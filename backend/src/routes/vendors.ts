@@ -27,6 +27,23 @@ router.get('/', requireAuth, async (req, res) => {
   res.json(rows);
 });
 
+// ── GET /vendors/next-code — auto-generate next vendor code ──────────────────
+
+router.get('/next-code', requireAuth, async (_req, res) => {
+  const result = await db
+    .select({ vendor_code: suppliers.vendor_code })
+    .from(suppliers)
+    .orderBy(suppliers.vendor_code);
+
+  const maxSeq = result.reduce((max, row) => {
+    const m = row.vendor_code?.match(/^VND-(\d+)$/);
+    return m ? Math.max(max, parseInt(m[1]!, 10)) : max;
+  }, 0);
+
+  const seq = String(maxSeq + 1).padStart(3, '0');
+  res.json({ code: `VND-${seq}` });
+});
+
 // ── GET /vendors/:id ──────────────────────────────────────────────────────────
 
 router.get(

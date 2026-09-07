@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useGRNList, type GRN as GRNType, type GRNStatus } from '@/api/queries/grn';
 import { usePOList, type PurchaseOrder, type POStatus } from '@/api/queries/pos';
 import { apiClient } from '@/api/client';
+import { useSingleSite } from '@/hooks/useSingleSite';
 
 // ── Status badges ──────────────────────────────────────────────────────────
 
@@ -111,23 +112,25 @@ function POCard({ po, onReceive }: { po: PurchaseOrder; onReceive: () => void })
 
 interface Vendor { id: string; name: string; vendor_code: string | null; }
 
+const today = new Date().toISOString().split('T')[0]!;
+
 function CreatePOModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { siteId } = useSingleSite();
+
   const { data: vendors } = useQuery<Vendor[]>({
     queryKey: ['vendors'],
     queryFn: () => apiClient<Vendor[]>('/vendors'),
     staleTime: 60_000,
   });
 
-  const { data: sites } = useQuery<{ id: string; name: string }[]>({
-    queryKey: ['sites'],
-    queryFn: () => apiClient<{ id: string; name: string }[]>('/locations/sites'),
-    staleTime: 300_000,
+  const { data: nextRef } = useQuery<{ ref: string }>({
+    queryKey: ['purchase-orders', 'next-ref'],
+    queryFn: () => apiClient<{ ref: string }>('/purchase-orders/next-ref'),
+    staleTime: 0,
   });
 
   const [supplierId, setSupplierId] = useState('');
-  const [siteId, setSiteId] = useState('');
-  const [poNumber, setPoNumber] = useState('');
-  const [expectedDate, setExpectedDate] = useState('');
+  const [expectedDate, setExpectedDate] = useState(today);
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
 
@@ -142,11 +145,16 @@ function CreatePOModal({ onClose, onCreated }: { onClose: () => void; onCreated:
     onError: () => setError('Failed to create PO. Please try again.'),
   });
 
-  const selectStyle = {
+  const fieldStyle: React.CSSProperties = {
     height: '40px', padding: '0 10px', fontSize: '14px', border: '1px solid var(--border)',
     borderRadius: '6px', backgroundColor: 'var(--surface-sunken)', color: 'var(--text)', fontFamily: 'inherit', width: '100%',
   };
-  const inputStyle = { ...selectStyle };
+  const labelStyle: React.CSSProperties = {
+    fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
+  };
+
+  const poNumber = nextRef?.ref ?? '';
+  const canSubmit = !!supplierId && !!siteId && !!poNumber;
 
   return (
     <div
@@ -156,11 +164,22 @@ function CreatePOModal({ onClose, onCreated }: { onClose: () => void; onCreated:
       <div style={{ backgroundColor: 'var(--surface)', borderRadius: '12px', width: '100%', maxWidth: '480px', maxHeight: '90dvh', overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>Create Purchase Order</h2>
 
+        {/* Auto-generated PO number — read-only */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          <label style={labelStyle}>PO Number</label>
+          <input
+            type="text"
+            value={poNumber || 'Generating…'}
+            readOnly
+            style={{ ...fieldStyle, backgroundColor: 'var(--surface)', color: poNumber ? 'var(--brand-primary)' : 'var(--text-muted)', fontWeight: 700, fontFamily: "'IBM Plex Mono', monospace", cursor: 'default' }}
+          />
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <label style={labelStyle}>
             Supplier <span style={{ color: 'var(--scan-error)' }}>*</span>
           </label>
-          <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} style={selectStyle}>
+          <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} style={fieldStyle}>
             <option value="">Select supplier…</option>
             {vendors?.map((v) => (
               <option key={v.id} value={v.id}>{v.name}{v.vendor_code ? ` (${v.vendor_code})` : ''}</option>
@@ -169,35 +188,12 @@ function CreatePOModal({ onClose, onCreated }: { onClose: () => void; onCreated:
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            Site <span style={{ color: 'var(--scan-error)' }}>*</span>
-          </label>
-          <select value={siteId} onChange={(e) => setSiteId(e.target.value)} style={selectStyle}>
-            <option value="">Select site…</option>
-            {sites?.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
+          <label style={labelStyle}>Expected Date</label>
+          <input type="date" value={expectedDate} onChange={(e) => setExpectedDate(e.target.value)} style={fieldStyle} />
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            PO Number <span style={{ color: 'var(--scan-error)' }}>*</span>
-          </label>
-          <input type="text" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="PO-2024-001" style={inputStyle} />
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            Expected Date
-          </label>
-          <input type="date" value={expectedDate} onChange={(e) => setExpectedDate(e.target.value)} style={inputStyle} />
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            Notes
-          </label>
+          <label style={labelStyle}>Notes</label>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -215,8 +211,8 @@ function CreatePOModal({ onClose, onCreated }: { onClose: () => void; onCreated:
             variant="primary"
             size="md"
             loading={create.isPending}
-            disabled={!supplierId || !siteId || !poNumber.trim()}
-            onClick={() => create.mutate({ supplier_id: supplierId, site_id: siteId, po_number: poNumber.trim(), expected_date: expectedDate || undefined, notes: notes || undefined, lines: [] })}
+            disabled={!canSubmit}
+            onClick={() => create.mutate({ supplier_id: supplierId, site_id: siteId!, po_number: poNumber, expected_date: expectedDate || undefined, notes: notes || undefined, lines: [] })}
           >
             Create PO
           </Button>
@@ -231,7 +227,6 @@ function CreatePOModal({ onClose, onCreated }: { onClose: () => void; onCreated:
 export default function GRN() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'pos' | 'grns'>('grns');
-  const [blindRef, setBlindRef] = useState('');
   const [showBlind, setShowBlind] = useState(false);
   const [showCreatePO, setShowCreatePO] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -240,11 +235,19 @@ export default function GRN() {
   const { data: poData, isLoading: posLoading, error: posError } = usePOList('confirmed');
   const pos = poData?.data ?? [];
 
+  const { data: nextGrnRef } = useQuery<{ ref: string }>({
+    queryKey: ['grn', 'next-ref'],
+    queryFn: () => apiClient<{ ref: string }>('/grn/next-ref'),
+    staleTime: 0,
+    enabled: showBlind,
+  });
+
   async function startBlindReceive() {
-    if (!blindRef.trim()) return;
+    const ref = nextGrnRef?.ref;
+    if (!ref) return;
     setCreating(true);
     try {
-      const grn = await apiClient<GRNType>('/grn', { method: 'POST', body: { reference: blindRef.trim(), blind: true } });
+      const grn = await apiClient<GRNType>('/grn', { method: 'POST', body: { reference: ref, blind: true } });
       navigate(`/inward/receive/${grn.id}`);
     } catch {
       // error handled by apiClient
@@ -309,14 +312,13 @@ export default function GRN() {
           {showBlind && (
             <div style={{ backgroundColor: 'var(--surface)', border: '2px solid var(--brand-primary)', borderRadius: '12px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               <p style={{ margin: 0, fontWeight: 600, fontSize: '1.0625rem' }}>Blind Receive — no PO</p>
-              <input
-                type="text"
-                placeholder="Supplier invoice / reference"
-                value={blindRef}
-                onChange={(e) => setBlindRef(e.target.value)}
-                style={{ height: '56px', padding: '0 1rem', fontSize: '1.125rem', border: '2px solid var(--border)', borderRadius: '8px', backgroundColor: 'var(--surface-sunken)', color: 'var(--text)', fontFamily: 'inherit' }}
-              />
-              <Button variant="primary" size="lg" fullWidth loading={creating} disabled={!blindRef.trim()} onClick={() => void startBlindReceive()}>
+              <div style={{ padding: '0.75rem 1rem', backgroundColor: 'var(--surface-sunken)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>Auto-assigned GRN number</div>
+                <div style={{ fontSize: '1.375rem', fontWeight: 700, fontFamily: "'IBM Plex Mono', monospace", color: 'var(--brand-primary)' }}>
+                  {nextGrnRef?.ref ?? 'Generating…'}
+                </div>
+              </div>
+              <Button variant="primary" size="lg" fullWidth loading={creating} disabled={!nextGrnRef?.ref} onClick={() => void startBlindReceive()}>
                 Start Blind Receive
               </Button>
             </div>

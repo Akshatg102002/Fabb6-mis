@@ -136,6 +136,20 @@ router.get('/grn', requireAuth, async (req, res) => {
   res.json(rows);
 });
 
+// ── GET /grn/next-ref — auto-generate next GRN number ───────────────────────
+
+router.get('/grn/next-ref', requireAuth, async (_req, res) => {
+  const ym = new Date().toISOString().slice(0, 7).replace('-', '');
+  const prefix = `GRN-${ym}-`;
+  const result = await pool.query<{ next_seq: string }>(
+    `SELECT COALESCE(MAX(CAST(SUBSTR(grn_number, $2) AS INTEGER)), 0) + 1 AS next_seq
+     FROM grns WHERE grn_number LIKE $1`,
+    [`${prefix}%`, prefix.length + 1],
+  );
+  const seq = String(Number(result.rows[0]?.next_seq ?? 1)).padStart(3, '0');
+  res.json({ ref: `${prefix}${seq}` });
+});
+
 // ── Frontend compatibility: POST /grn (blind receive) ────────────────────────
 
 router.post('/grn', requireAuth, async (req, res) => {
@@ -193,6 +207,19 @@ router.post('/grn', requireAuth, async (req, res) => {
 });
 
 // ── Purchase Orders ─────────────────────────────────────────────────────────
+
+// GET /purchase-orders/next-ref — auto-generate next PO number
+router.get('/purchase-orders/next-ref', requireAuth, async (_req, res) => {
+  const ym = new Date().toISOString().slice(0, 7).replace('-', '');
+  const prefix = `PO-${ym}-`;
+  const result = await pool.query<{ next_seq: string }>(
+    `SELECT COALESCE(MAX(CAST(SUBSTR(po_number, $2) AS INTEGER)), 0) + 1 AS next_seq
+     FROM purchase_orders WHERE po_number LIKE $1`,
+    [`${prefix}%`, prefix.length + 1],
+  );
+  const seq = String(Number(result.rows[0]?.next_seq ?? 1)).padStart(3, '0');
+  res.json({ ref: `${prefix}${seq}` });
+});
 
 // GET /purchase-orders
 router.get(

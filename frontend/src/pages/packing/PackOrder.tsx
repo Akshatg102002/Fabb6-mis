@@ -53,10 +53,16 @@ export default function PackOrder() {
   const { data: queue } = usePackingQueue();
 
   async function loadTote(barcode: string) {
+    const trimmed = barcode.trim();
+    if (trimmed.length < 4) {
+      setScanStatus('warn');
+      setScanMessage('Enter a valid tote barcode (min 4 chars)');
+      return;
+    }
     setLoading(true);
     try {
-      const data = await apiClient<PackOrderData>(`/packing/tote/${encodeURIComponent(barcode)}`);
-      setToteBarcode(barcode);
+      const data = await apiClient<PackOrderData>(`/packing/tote/${encodeURIComponent(trimmed)}`);
+      setToteBarcode(trimmed);
       setOrder(data);
       setScanStatus('ok');
       setScanMessage('Tote loaded — scan items');

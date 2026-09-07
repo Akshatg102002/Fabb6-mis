@@ -133,15 +133,17 @@ function VendorFormFields({
   form,
   set,
   disabled,
+  hideCode,
 }: {
   form: VendorForm;
   set: (k: keyof VendorForm) => (v: string) => void;
   disabled?: boolean;
+  hideCode?: boolean;
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       <Field label="Company Name" value={form.name} onChange={set('name')} placeholder="Acme Supplies Pvt Ltd" required disabled={disabled} />
-      <Field label="Vendor Code" value={form.vendor_code} onChange={set('vendor_code')} placeholder="SUP-001" disabled={disabled} />
+      {!hideCode && <Field label="Vendor Code" value={form.vendor_code} onChange={set('vendor_code')} placeholder="SUP-001" disabled={disabled} />}
       <Field label="GST Number" value={form.gstin} onChange={set('gstin')} placeholder="29ABCDE1234F1Z5" disabled={disabled} />
       <Field label="City" value={form.city} onChange={set('city')} placeholder="Mumbai" disabled={disabled} />
       <Field label="Contact Person" value={form.contact_name} onChange={set('contact_name')} placeholder="Ravi Kumar" disabled={disabled} />
@@ -177,6 +179,13 @@ export default function Vendors() {
   const { data: vendors, isLoading, error: fetchError } = useQuery<Vendor[]>({
     queryKey: ['vendors'],
     queryFn: () => apiClient<Vendor[]>('/vendors'),
+  });
+
+  const { data: nextCode } = useQuery<{ code: string }>({
+    queryKey: ['vendors', 'next-code'],
+    queryFn: () => apiClient<{ code: string }>('/vendors/next-code'),
+    staleTime: 0,
+    enabled: showCreate,
   });
 
   const createVendor = useMutation({
@@ -319,7 +328,17 @@ export default function Vendors() {
       {/* Create slide-over */}
       <SlideOver open={showCreate} onClose={() => { setShowCreate(false); setCreateForm(EMPTY_FORM); setError(''); }} title="Add Vendor">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <VendorFormFields form={createForm} set={setCreate} />
+          {/* Auto-generated vendor code — read only */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Vendor Code</label>
+            <input
+              type="text"
+              value={nextCode?.code ?? 'Generating…'}
+              readOnly
+              style={{ height: '38px', padding: '0 10px', fontSize: '14px', border: '1px solid var(--border)', borderRadius: '6px', backgroundColor: 'var(--surface-sunken)', color: 'var(--brand-primary)', fontFamily: "'IBM Plex Mono', monospace", fontWeight: 700, cursor: 'default' }}
+            />
+          </div>
+          <VendorFormFields form={createForm} set={setCreate} hideCode />
           {error && <p style={{ margin: 0, color: 'var(--scan-error)', fontSize: '13px' }}>{error}</p>}
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: '8px' }}>
             <Button variant="ghost" size="md" onClick={() => { setShowCreate(false); setCreateForm(EMPTY_FORM); setError(''); }}>Cancel</Button>
@@ -328,7 +347,7 @@ export default function Vendors() {
               size="md"
               loading={createVendor.isPending}
               disabled={!createForm.name.trim()}
-              onClick={() => createVendor.mutate(createForm)}
+              onClick={() => createVendor.mutate({ ...createForm, vendor_code: nextCode?.code ?? createForm.vendor_code })}
             >
               Create Vendor
             </Button>
