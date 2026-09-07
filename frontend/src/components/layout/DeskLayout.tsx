@@ -66,7 +66,7 @@ const NAV_SECTIONS: NavSection[] = [
         roles: ['inward', 'supervisor', 'admin'],
       },
       {
-        label: 'Inward',
+        label: 'GRN / Receiving',
         to: '/inward',
         icon: ArrowDownToLine,
         roles: ['inward', 'supervisor', 'admin'],
