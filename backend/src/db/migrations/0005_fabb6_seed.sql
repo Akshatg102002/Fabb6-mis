@@ -268,8 +268,14 @@ BEGIN
 END $$;
 
 -- ─────────────────────────────────────────────────────────────
--- 8. REFRESH the stock_on_hand materialized view
+-- 8. REFRESH stock_on_hand if the materialized view exists
+--    (created by 0001_initial.sql; skipped when using db:push schema)
 -- ─────────────────────────────────────────────────────────────
-REFRESH MATERIALIZED VIEW CONCURRENTLY stock_on_hand;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_matviews WHERE matviewname = 'stock_on_hand') THEN
+    REFRESH MATERIALIZED VIEW CONCURRENTLY stock_on_hand;
+  END IF;
+END $$;
 
 COMMIT;
