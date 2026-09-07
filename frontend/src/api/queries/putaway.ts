@@ -28,7 +28,7 @@ export const putawayKeys = {
 export function usePendingPutaway() {
   return useQuery({
     queryKey: putawayKeys.pending(),
-    queryFn: () => apiClient<PutawayTask[]>('/putaway?status=pending'),
+    queryFn: () => apiClient<PutawayTask[]>('/putaway'),
     staleTime: 10_000,
     refetchInterval: 20_000,
   });

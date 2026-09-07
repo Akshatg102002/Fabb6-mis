@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/Button';
 import { apiClient } from '@/api/client';
 
@@ -28,11 +28,6 @@ interface ImportResult {
   imported: number;
   skipped: number;
   errors: { message: string }[];
-}
-
-interface SiteOption {
-  id: string;
-  name: string;
 }
 
 // ── CSV utilities ────────────────────────────────────────────────────────────
@@ -149,23 +144,12 @@ export default function StockImport() {
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [siteId, setSiteId] = useState('');
-  const [sites, setSites] = useState<SiteOption[]>([]);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Load available sites
-  useEffect(() => {
-    apiClient<{ data: { id: string; name: string }[] }>('/locations/sites')
-      .then((resp) => setSites(resp.data))
-      .catch(() => {
-        // If API unavailable, fall back to manual entry — no-op
-      });
-  }, []);
 
   const processFile = useCallback((file: File) => {
     if (!file.name.endsWith('.csv')) {
@@ -220,7 +204,7 @@ export default function StockImport() {
   const validCount = parsedRows.filter((r) => r.valid).length;
 
   const handleImport = async () => {
-    if (!allValid || !siteId.trim()) return;
+    if (!allValid) return;
     setImporting(true);
     setImportError(null);
     setResult(null);
@@ -231,7 +215,7 @@ export default function StockImport() {
     try {
       const response = await apiClient<ImportResult>('/stock/import', {
         method: 'POST',
-        body: { site_id: siteId.trim(), rows },
+        body: { rows },
       });
       setResult(response);
       setParsedRows([]);
@@ -288,60 +272,9 @@ export default function StockImport() {
         </Button>
       </div>
 
-      {/* ── Step 2: Site selector ── */}
+      {/* ── Step 2: Upload ── */}
       <div style={cardStyle}>
-        <label style={labelStyle} htmlFor="site-select">
-          Step 2 — Select Site
-        </label>
-        {sites.length > 0 ? (
-          <select
-            id="site-select"
-            value={siteId}
-            onChange={(e) => setSiteId(e.target.value)}
-            style={{
-              height: '36px',
-              padding: '0 0.75rem',
-              fontSize: '0.875rem',
-              border: '1px solid var(--border)',
-              borderRadius: '6px',
-              backgroundColor: 'var(--surface)',
-              color: 'var(--text)',
-              fontFamily: 'inherit',
-              minWidth: '240px',
-            }}
-          >
-            <option value="">— choose site —</option>
-            {sites.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input
-            id="site-select"
-            type="text"
-            placeholder="Paste Site UUID…"
-            value={siteId}
-            onChange={(e) => setSiteId(e.target.value)}
-            style={{
-              height: '36px',
-              padding: '0 0.75rem',
-              fontSize: '0.875rem',
-              border: '1px solid var(--border)',
-              borderRadius: '6px',
-              backgroundColor: 'var(--surface)',
-              color: 'var(--text)',
-              fontFamily: "'IBM Plex Mono', monospace",
-              minWidth: '320px',
-            }}
-          />
-        )}
-      </div>
-
-      {/* ── Step 3: Upload ── */}
-      <div style={cardStyle}>
-        <span style={labelStyle}>Step 3 — Upload CSV</span>
+        <span style={labelStyle}>Step 2 — Upload CSV</span>
 
         {/* Drop zone */}
         <div
@@ -614,7 +547,7 @@ export default function StockImport() {
           <Button
             variant="primary"
             size="md"
-            disabled={!allValid || !siteId.trim() || importing}
+            disabled={!allValid || importing}
             loading={importing}
             onClick={() => void handleImport()}
           >
@@ -622,12 +555,7 @@ export default function StockImport() {
               ? `Importing… ${importProgress.done} of ${importProgress.total}`
               : `Import ${validCount} row${validCount !== 1 ? 's' : ''}`}
           </Button>
-          {!siteId.trim() && (
-            <span style={{ fontSize: '0.85rem', color: 'var(--scan-warn, #c77700)' }}>
-              Select a site before importing
-            </span>
-          )}
-          {!allValid && siteId.trim() && (
+          {!allValid && (
             <span style={{ fontSize: '0.85rem', color: 'var(--scan-error)' }}>
               Fix validation errors before importing
             </span>

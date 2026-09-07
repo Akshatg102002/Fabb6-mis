@@ -4,7 +4,7 @@ export const createPoSchema = z.object({
   supplier_id: z.string().uuid(),
   site_id: z.string().uuid(),
   po_number: z.string().min(1).max(50),
-  expected_date: z.string().datetime().optional(),
+  expected_date: z.string().optional(),
   notes: z.string().max(2000).optional(),
   lines: z
     .array(
@@ -15,7 +15,7 @@ export const createPoSchema = z.object({
         line_number: z.number().int().positive(),
       }),
     )
-    .min(1),
+    .default([]),
 });
 
 export const createGrnSchema = z.object({

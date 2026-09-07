@@ -216,6 +216,15 @@ export default function PackOrder() {
         </div>
       )}
 
+      {/* Empty state */}
+      {!hasQueue && step === 'scan-tote' && (
+        <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>📦</div>
+          <div style={{ fontWeight: 600, fontSize: '1.1rem', color: 'var(--text)', marginBottom: '0.25rem' }}>No orders ready to pack</div>
+          <div style={{ fontSize: '0.9rem' }}>Orders will appear here once pick lists are completed.</div>
+        </div>
+      )}
+
       {/* Scan section */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         <ScanResult status={scanStatus} message={scanMessage} />

@@ -10,6 +10,67 @@ import { z } from 'zod';
 
 const router: express.Router = Router();
 
+// GET /putaway?status=pending — return pending putaway items (PutawayTask shape)
+router.get('/', requireAuth, async (req, res) => {
+  const siteResult = await pool.query<{ id: string }>(
+    `SELECT id FROM sites WHERE is_active = true ORDER BY created_at ASC LIMIT 1`,
+  );
+  const siteId = siteResult.rows[0]?.id ?? null;
+
+  const result = await pool.query<{
+    id: string;
+    grn_id: string;
+    grn_number: string;
+    sku_id: string;
+    sku_code: string;
+    sku_name: string;
+    quantity: string;
+    created_at: string;
+  }>(
+    `SELECT
+       gl.id,
+       g.id           AS grn_id,
+       g.grn_number,
+       gl.sku_id,
+       s.code         AS sku_code,
+       s.name         AS sku_name,
+       gl.qty_accepted AS quantity,
+       g.created_at
+     FROM grn_lines gl
+     JOIN grns    g ON g.id = gl.grn_id
+     JOIN skus    s ON s.id = gl.sku_id
+     WHERE g.status = 'completed'
+       AND ($1::uuid IS NULL OR g.site_id = $1::uuid)
+       AND NOT EXISTS (
+         SELECT 1 FROM stock_movements sm
+         WHERE sm.movement_type  = 'putaway'
+           AND sm.reference_type = 'grn'
+           AND sm.reference_id   = g.id
+           AND sm.sku_id         = gl.sku_id
+       )
+     ORDER BY g.created_at ASC`,
+    [siteId],
+  );
+
+  const tasks = result.rows.map((r) => ({
+    id: r.id,
+    grnId: r.grn_id,
+    grnReference: r.grn_number,
+    sku: r.sku_code,
+    skuName: r.sku_name,
+    barcode: '',
+    quantity: Number(r.quantity),
+    uom: 'EACH',
+    suggestedLocationId: '',
+    suggestedLocationCode: '—',
+    assignedTo: null,
+    status: 'pending' as const,
+    createdAt: r.created_at,
+  }));
+
+  res.json(tasks);
+});
+
 // GET /putaway/tasks?site_id=&assigned_to=
 // Pending putaway tasks = GRN lines from completed GRNs
 // that haven't yet had a putaway movement recorded.

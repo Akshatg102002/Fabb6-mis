@@ -478,16 +478,21 @@ router.post(
   async (req, res) => {
     try {
       const body = req.body as { site_id?: string; rows?: unknown[] };
-      const siteId = body.site_id ?? req.auth?.siteId ?? null;
 
-      if (!siteId) {
-        res.status(400).json({ error: 'site_id is required in the request body' });
-        return;
-      }
       if (!Array.isArray(body.rows) || body.rows.length === 0) {
         res.status(400).json({ error: 'rows array is required and must not be empty' });
         return;
       }
+
+      // ── Auto-pick first active site ────────────────────────────────────
+      const siteResult = await pool.query<{ id: string }>(
+        `SELECT id FROM sites WHERE is_active = true ORDER BY created_at ASC LIMIT 1`,
+      );
+      if ((siteResult.rowCount ?? 0) === 0) {
+        res.status(500).json({ error: 'No active site configured' });
+        return;
+      }
+      const siteId = siteResult.rows[0]!.id;
 
       // ── Validate all rows before processing ────────────────────────────
       const { validRows, errors: validationErrors } = validateImportRows(body.rows);
@@ -496,11 +501,26 @@ router.post(
         return;
       }
 
+      // ── Verify all location codes exist (no auto-create) ───────────────
+      const uniqueLocationCodes = [...new Set(validRows.map((r) => r.location_code))];
+      const locationLookup = await pool.query<{ id: string; code: string }>(
+        `SELECT id, code FROM locations WHERE code = ANY($1::text[]) AND is_active = true`,
+        [uniqueLocationCodes],
+      );
+      const locationIdMap = new Map<string, string>(locationLookup.rows.map((r) => [r.code, r.id]));
+      const missingLocations = uniqueLocationCodes.filter((c) => !locationIdMap.has(c));
+      if (missingLocations.length > 0) {
+        res.status(422).json({
+          valid: false,
+          errors: missingLocations.map((c) => ({ row: 0, field: 'location_code', message: `Location not found: ${c}` })),
+        });
+        return;
+      }
+
       // ── Master data setup in a single transaction ──────────────────────
       const brandIdMap = new Map<string, string>();
       const skuIdMap = new Map<string, string>();
       const batchIdMap = new Map<string, string>(); // key: `${skuCode}:${batchNumber}`
-      const locationIdMap = new Map<string, string>();
 
       const client = await pool.connect();
       try {
@@ -571,21 +591,6 @@ router.post(
             const newBatchRow = newBatch.rows[0];
             if (newBatchRow) batchIdMap.set(batchKey, newBatchRow.id);
           }
-        }
-
-        // Step 4 — upsert locations
-        const uniqueLocationCodes = [...new Set(validRows.map((r) => r.location_code))];
-        for (const locationCode of uniqueLocationCodes) {
-          const { aisle, rack, shelf, position } = parseLocationParts(locationCode);
-          const locResult = await client.query<{ id: string }>(
-            `INSERT INTO locations (site_id, code, type, aisle, rack, shelf, position, is_active)
-             VALUES ($1, $2, 'bin', $3, $4, $5, $6, true)
-             ON CONFLICT (code) DO UPDATE SET code = EXCLUDED.code
-             RETURNING id`,
-            [siteId, locationCode, aisle, rack, shelf, position],
-          );
-          const locRow = locResult.rows[0];
-          if (locRow) locationIdMap.set(locationCode, locRow.id);
         }
 
         await client.query('COMMIT');

@@ -51,6 +51,14 @@ export default function Login() {
         { id: res.user.id, name: res.user.name, role: res.user.role as Parameters<typeof login>[0]['role'], site_id: res.user.site_id },
         res.token,
       );
+      // Auto-pick first active site and store for the session
+      try {
+        const sites = await apiClient<{ id: string; is_active: boolean }[]>('/locations/sites');
+        const active = sites.find((s) => s.is_active) ?? sites[0];
+        if (active) localStorage.setItem('fabb6_site_id', active.id);
+      } catch {
+        // non-critical — site_id will be fetched per-request on backend
+      }
       const role = res.user.role;
       const dest =
         role === 'admin' || role === 'read_only'
