@@ -175,16 +175,29 @@ router.get(
       conditions.push(`l.site_id = $${idx++}`);
       params.push(q.site_id);
     }
-    if (!q.include_empty) {
-      conditions.push('soh.quantity > 0');
-    }
 
+    // When include_empty is false, restrict the ledger CTE to positive balances only
+    const having = q.include_empty ? '' : 'HAVING SUM(quantity) > 0';
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const offset = (q.page - 1) * q.limit;
 
+    // stock_on_hand derived inline: inbound (+) to to_location, outbound (-) from from_location
+    const sohCte = `
+      WITH soh AS (
+        SELECT sku_id, batch_id, location_id, SUM(quantity) AS quantity
+        FROM (
+          SELECT sku_id, batch_id, to_location_id   AS location_id,  quantity FROM stock_movements WHERE to_location_id   IS NOT NULL
+          UNION ALL
+          SELECT sku_id, batch_id, from_location_id AS location_id, -quantity FROM stock_movements WHERE from_location_id IS NOT NULL
+        ) ledger
+        GROUP BY sku_id, batch_id, location_id
+        ${having}
+      )`;
+
     const [dataResult, countResult] = await Promise.all([
       pool.query(
-        `SELECT
+        `${sohCte}
+         SELECT
            soh.sku_id,
            soh.batch_id,
            soh.location_id,
@@ -197,7 +210,7 @@ router.get(
            l.code       AS location_code,
            l.type       AS location_type,
            l.site_id
-         FROM stock_on_hand soh
+         FROM soh
          JOIN skus      s ON s.id = soh.sku_id
          LEFT JOIN batches   b ON b.id = soh.batch_id
          JOIN locations l ON l.id = soh.location_id
@@ -207,8 +220,9 @@ router.get(
         [...params, q.limit, offset],
       ),
       pool.query(
-        `SELECT COUNT(*) AS total
-         FROM stock_on_hand soh
+        `${sohCte}
+         SELECT COUNT(*) AS total
+         FROM soh
          JOIN locations l ON l.id = soh.location_id
          ${where}`,
         params,
@@ -316,7 +330,17 @@ router.get(
     const q = req.query as unknown as { site_id: string; days_bucket: number };
 
     const result = await pool.query(
-      `SELECT
+      `WITH soh AS (
+         SELECT sku_id, batch_id, location_id, SUM(quantity) AS quantity
+         FROM (
+           SELECT sku_id, batch_id, to_location_id   AS location_id,  quantity FROM stock_movements WHERE to_location_id   IS NOT NULL
+           UNION ALL
+           SELECT sku_id, batch_id, from_location_id AS location_id, -quantity FROM stock_movements WHERE from_location_id IS NOT NULL
+         ) ledger
+         GROUP BY sku_id, batch_id, location_id
+         HAVING SUM(quantity) > 0
+       )
+       SELECT
          s.id          AS sku_id,
          s.code        AS sku_code,
          s.name        AS sku_name,
@@ -326,7 +350,7 @@ router.get(
          EXTRACT(DAY FROM b.expiry_date - NOW())::int AS days_remaining,
          SUM(soh.quantity)                            AS total_qty,
          l.site_id
-       FROM stock_on_hand soh
+       FROM soh
        JOIN skus      s ON s.id = soh.sku_id
        JOIN batches   b ON b.id = soh.batch_id
        JOIN locations l ON l.id = soh.location_id
@@ -334,7 +358,6 @@ router.get(
          AND b.expiry_date IS NOT NULL
          AND b.expiry_date > NOW()
          AND b.expiry_date <= NOW() + ($2 || ' days')::INTERVAL
-         AND soh.quantity  > 0
        GROUP BY s.id, s.code, s.name, b.id, b.batch_number, b.expiry_date, l.site_id
        ORDER BY b.expiry_date ASC`,
       [q.site_id, q.days_bucket],
@@ -358,7 +381,17 @@ router.get(
     const q = req.query as unknown as { site_id: string };
 
     const result = await pool.query(
-      `SELECT
+      `WITH soh AS (
+         SELECT sku_id, batch_id, location_id, SUM(quantity) AS quantity
+         FROM (
+           SELECT sku_id, batch_id, to_location_id   AS location_id,  quantity FROM stock_movements WHERE to_location_id   IS NOT NULL
+           UNION ALL
+           SELECT sku_id, batch_id, from_location_id AS location_id, -quantity FROM stock_movements WHERE from_location_id IS NOT NULL
+         ) ledger
+         GROUP BY sku_id, batch_id, location_id
+         HAVING SUM(quantity) > 0
+       )
+       SELECT
          s.id            AS sku_id,
          s.code          AS sku_code,
          s.name          AS sku_name,
@@ -366,12 +399,11 @@ router.get(
          AVG(b.landed_cost_per_unit::numeric)      AS avg_cost,
          SUM(soh.quantity * COALESCE(b.landed_cost_per_unit::numeric, s.standard_cost::numeric, 0))
                                                    AS total_value
-       FROM stock_on_hand soh
+       FROM soh
        JOIN skus      s ON s.id = soh.sku_id
        LEFT JOIN batches   b ON b.id = soh.batch_id
        JOIN locations l ON l.id = soh.location_id
-       WHERE l.site_id  = $1
-         AND soh.quantity > 0
+       WHERE l.site_id = $1
        GROUP BY s.id, s.code, s.name
        ORDER BY total_value DESC`,
       [q.site_id],
