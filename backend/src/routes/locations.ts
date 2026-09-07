@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { eq, and, ilike, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { locations, sites } from '../db/schema/index.js';
@@ -13,7 +13,7 @@ import {
 } from '../schemas/locations.js';
 import { z } from 'zod';
 
-const router = Router();
+const router: express.Router = Router();
 
 // GET /locations
 router.get(

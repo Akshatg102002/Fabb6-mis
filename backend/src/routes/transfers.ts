@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { pool } from '../db/index.js';
 import { requireAuth, requireRoles } from '../middleware/auth.js';
@@ -10,7 +10,7 @@ import { z } from 'zod';
 // Each transfer is represented by a shared reference_id (UUID) linking
 // transfer_out (at source) and transfer_receipt (at destination) movements.
 
-const router = Router();
+const router: express.Router = Router();
 
 const transferLineSchema = z.object({
   sku_id: z.string().uuid(),

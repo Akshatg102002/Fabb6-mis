@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { createHash } from 'crypto';
 import { pool } from '../db/index.js';
 import { requireAuth, requireRoles } from '../middleware/auth.js';
@@ -137,7 +137,7 @@ function makeImportKey(
   return `import-${hash}`;
 }
 
-const router = Router();
+const router: express.Router = Router();
 
 // GET /stock/on-hand
 router.get(

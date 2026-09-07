@@ -1,10 +1,10 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { pool } from '../db/index.js';
 import { requireAuth, requireRoles } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { z } from 'zod';
 
-const router = Router();
+const router: express.Router = Router();
 
 const reportQuerySchema = z.object({
   site_id: z.string().uuid(),

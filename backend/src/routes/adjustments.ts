@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { pool } from '../db/index.js';
@@ -13,7 +13,7 @@ import {
 } from '../schemas/adjustments.js';
 import { z } from 'zod';
 
-const router = Router();
+const router: express.Router = Router();
 
 // POST /adjustments — request adjustment
 router.post(

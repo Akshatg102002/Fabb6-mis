@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
@@ -6,7 +6,7 @@ import { suppliers } from '../db/schema/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 
-const router = Router();
+const router: express.Router = Router();
 
 // ── GET /vendors ──────────────────────────────────────────────────────────────
 

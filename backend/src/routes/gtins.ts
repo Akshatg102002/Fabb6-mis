@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { gtins, skus } from '../db/schema/index.js';
@@ -7,7 +7,7 @@ import { validate } from '../middleware/validate.js';
 import { createGtinSchema, barcodeQuerySchema } from '../schemas/catalogue.js';
 import { z } from 'zod';
 
-const router = Router();
+const router: express.Router = Router();
 
 // GET /gtins/lookup?barcode= — resolve a barcode to its SKU
 router.get(

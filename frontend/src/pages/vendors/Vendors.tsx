@@ -14,11 +14,6 @@ interface Vendor {
   is_active: boolean;
 }
 
-interface VendorDetail extends Vendor {
-  contact_name: string | null;
-  contact_phone: string | null;
-  address: string | null;
-}
 
 interface VendorForm {
   name: string;

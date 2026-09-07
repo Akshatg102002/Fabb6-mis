@@ -1,8 +1,8 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { pool } from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 
-const router = Router();
+const router: express.Router = Router();
 
 const LEDGER_CTE = `
   inbound AS (

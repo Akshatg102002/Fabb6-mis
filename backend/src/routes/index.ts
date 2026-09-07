@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import authRouter from './auth.js';
 import skusRouter from './skus.js';
 import gtinsRouter from './gtins.js';
@@ -18,7 +18,7 @@ import shippingRouter from './shipping.js';
 import vendorsRouter from './vendors.js';
 import dashboardRouter from './dashboard.js';
 
-const router = Router();
+const router: express.Router = Router();
 
 // Auth
 router.use('/auth', authRouter);

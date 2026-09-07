@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { pool } from '../db/index.js';
 import { requireAuth, requireRoles } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
@@ -12,7 +12,7 @@ import { z } from 'zod';
 //   site_id UUID, printer_id VARCHAR(100),
 //   created_at TIMESTAMPTZ, acked_at TIMESTAMPTZ, ack_error TEXT
 
-const router = Router();
+const router: express.Router = Router();
 
 // Bearer token for print agent (separate from user sessions)
 function requirePrintAgentToken(

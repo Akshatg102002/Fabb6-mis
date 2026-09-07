@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { eq, and, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { db } from '../db/index.js';
@@ -15,7 +15,7 @@ import {
 } from '../schemas/counting.js';
 import { z } from 'zod';
 
-const router = Router();
+const router: express.Router = Router();
 
 // GET /cycle-counts
 router.get(

@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { z } from 'zod';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
@@ -8,7 +8,7 @@ import { writeStockMovement } from '../services/stock-movement.js';
 import { requireAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 
-const router = Router();
+const router: express.Router = Router();
 
 // ── List manifests ────────────────────────────────────────────────────────────
 

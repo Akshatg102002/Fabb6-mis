@@ -21,7 +21,7 @@ const PORT = parseInt(process.env['PORT'] ?? '3000', 10);
 const HOST = process.env['HOST'] ?? '0.0.0.0';
 
 // ─── App ──────────────────────────────────────────────────────────────────────
-const app = express();
+const app: express.Application = express();
 
 // Security headers
 app.use(helmet());

@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { eq } from 'drizzle-orm';
 import { pool } from '../db/index.js';
 import { db } from '../db/index.js';
@@ -8,7 +8,7 @@ import { validate } from '../middleware/validate.js';
 import { writeStockMovement } from '../services/stock-movement.js';
 import { z } from 'zod';
 
-const router = Router();
+const router: express.Router = Router();
 
 // GET /putaway/tasks?site_id=&assigned_to=
 // Pending putaway tasks = GRN lines from completed GRNs

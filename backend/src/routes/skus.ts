@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { eq, ilike, and, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { skus } from '../db/schema/index.js';
@@ -7,7 +7,7 @@ import { validate } from '../middleware/validate.js';
 import { idempotency } from '../middleware/idempotency.js';
 import { createSkuSchema, updateSkuSchema, skuQuerySchema } from '../schemas/catalogue.js';
 
-const router = Router();
+const router: express.Router = Router();
 
 // GET /skus
 router.get('/', requireAuth, validate({ query: skuQuerySchema }), async (req, res) => {

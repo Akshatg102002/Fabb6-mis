@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import * as argon2 from 'argon2';
 import { createHash, randomBytes } from 'crypto';
 import { eq, and, isNull } from 'drizzle-orm';
@@ -9,7 +9,7 @@ import { validate } from '../middleware/validate.js';
 import { loginSchema, logoutSchema } from '../schemas/auth.js';
 import { logger } from '../logger.js';
 
-const router = Router();
+const router: express.Router = Router();
 
 // GET /auth/users — list active users by name for device login picker
 router.get('/users', async (req, res) => {

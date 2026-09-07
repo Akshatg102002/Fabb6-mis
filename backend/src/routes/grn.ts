@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { eq, and, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { db } from '../db/index.js';
@@ -23,7 +23,7 @@ import {
 } from '../schemas/grn.js';
 import { z } from 'zod';
 
-const router = Router();
+const router: express.Router = Router();
 
 // ── Frontend compatibility: GET /grn ─────────────────────────────────────────
 // The frontend calls /api/v1/grn?status=open; map to backend status values.

@@ -273,7 +273,6 @@ export default function GRN() {
     fontSize: '14px',
     fontWeight: active ? 600 : 500,
     color: active ? 'var(--brand-primary)' : 'var(--text-muted)',
-    borderBottom: `2px solid ${active ? 'var(--brand-primary)' : 'transparent'}`,
     background: 'none',
     border: 'none',
     borderBottom: `2px solid ${active ? 'var(--brand-primary)' : 'transparent'}`,
