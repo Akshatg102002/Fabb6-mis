@@ -1,20 +1,40 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import {
   ArrowDownToLine,
-  BarChart3,
-  ClipboardCheck,
   MapPin,
   Package,
   RotateCcw,
-  Settings as SettingsIcon,
-  ShoppingCart,
 } from 'lucide-react';
 import { DeskLayout } from '@/components/layout/DeskLayout';
-import { useSessionStore, type UserRole } from '@/stores/sessionStore';
+import { Button } from '@/components/ui/Button';
+import { useSessionStore } from '@/stores/sessionStore';
 import { apiClient } from '@/api/client';
 
-// ── Greeting ──────────────────────────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────────────
+
+interface DashboardStats {
+  totalSkus: number;
+  stockValue: number;
+  lowStockAlerts: number;
+  todayMovements: number;
+  top10Skus: { skuCode: string; skuName: string; qty: number; value: number }[];
+  brandStock: { brand: string; qty: number }[];
+  recentActivity: {
+    id: string;
+    movementType: string;
+    quantity: number;
+    createdAt: string;
+    skuCode: string;
+    skuName: string;
+    fromLoc: string | null;
+    toLoc: string | null;
+    userName: string | null;
+  }[];
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
 
 function getGreeting(): string {
   const h = new Date().getHours();
@@ -25,328 +45,345 @@ function getGreeting(): string {
 
 function getDateLabel(): string {
   return new Intl.DateTimeFormat('en-IN', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   }).format(new Date());
 }
 
-// ── KPI cards ─────────────────────────────────────────────────────────────────
+function fmtINR(v: number): string {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency', currency: 'INR', maximumFractionDigits: 0,
+  }).format(v);
+}
 
-interface KpiConfig {
+function fmtNum(v: number): string {
+  return v.toLocaleString('en-IN');
+}
+
+function fmtMovementType(t: string): string {
+  return t.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+// ── KPI Card ───────────────────────────────────────────────────────────────
+
+function KpiCard({
+  label,
+  value,
+  subtext,
+  accent,
+  loading,
+}: {
   label: string;
-  endpoint: string;
-}
-
-const KPI_CARDS: KpiConfig[] = [
-  { label: 'Total SKUs', endpoint: '/skus?per_page=1' },
-  { label: 'Stock Locations', endpoint: '/locations?per_page=1' },
-  { label: 'Pending Putaways', endpoint: '/putaway/tasks?status=pending&per_page=1' },
-  { label: 'Open Pick Lists', endpoint: '/pick-lists?status=pending,assigned,in_progress&per_page=1' },
-];
-
-interface PaginatedResponse {
-  total?: number;
-  meta?: { total?: number };
-}
-
-function useKpiValue(endpoint: string) {
-  const [value, setValue] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    apiClient<PaginatedResponse>(endpoint)
-      .then((data) => {
-        if (!cancelled) {
-          const total = data?.total ?? data?.meta?.total ?? 0;
-          setValue(total);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setValue(0);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [endpoint]);
-
-  return { value, loading };
-}
-
-function KpiCard({ label, endpoint }: KpiConfig) {
-  const { value, loading } = useKpiValue(endpoint);
-
+  value: string;
+  subtext?: string;
+  accent?: string;
+  loading: boolean;
+}) {
   return (
     <div
       style={{
         backgroundColor: '#FFFFFF',
         border: '1px solid var(--border)',
-        borderRadius: '8px',
-        padding: '20px',
+        borderRadius: '10px',
+        padding: '20px 24px',
         minWidth: 0,
+        borderLeft: accent ? `4px solid ${accent}` : undefined,
       }}
     >
-      <div
-        style={{
-          fontSize: '13px',
-          color: 'var(--text-muted)',
-          fontWeight: 500,
-          marginBottom: '8px',
-        }}
-      >
+      <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>
         {label}
       </div>
-
       {loading ? (
-        <div
-          style={{
-            height: '36px',
-            borderRadius: '4px',
-            background:
-              'linear-gradient(90deg, var(--border) 25%, var(--surface-sunken) 50%, var(--border) 75%)',
-            backgroundSize: '200% 100%',
-            animation: 'kpi-shimmer 1.4s ease infinite',
-            width: '64px',
-          }}
-        />
+        <div style={{ height: '36px', borderRadius: '4px', background: 'var(--border)', width: '80px', animation: 'shimmer 1.4s ease infinite', backgroundSize: '200% 100%' }} />
       ) : (
-        <div
-          style={{
-            fontSize: '32px',
-            fontWeight: 700,
-            color: 'var(--text)',
-            fontVariantNumeric: 'tabular-nums',
-            lineHeight: 1.1,
-          }}
-        >
-          {value?.toLocaleString('en-IN') ?? '0'}
-        </div>
+        <>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text)', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+            {value}
+          </div>
+          {subtext && (
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>{subtext}</div>
+          )}
+        </>
       )}
     </div>
   );
 }
 
-// ── Module tiles ──────────────────────────────────────────────────────────────
+// ── Bar Chart (SVG) ────────────────────────────────────────────────────────
 
-interface TileConfig {
-  icon: typeof ArrowDownToLine;
-  label: string;
-  to: string;
-  description: string;
-  roles: UserRole[];
-}
-
-const TILES: TileConfig[] = [
-  {
-    icon: ArrowDownToLine,
-    label: 'Receive GRN',
-    to: '/inward',
-    description: 'Receive stock against a purchase order',
-    roles: ['inward', 'supervisor', 'admin'],
-  },
-  {
-    icon: MapPin,
-    label: 'Putaway',
-    to: '/putaway',
-    description: 'Assign received stock to bin locations',
-    roles: ['inward', 'supervisor', 'admin'],
-  },
-  {
-    icon: ShoppingCart,
-    label: 'Pick Lists',
-    to: '/pick',
-    description: 'Pick items for outgoing orders',
-    roles: ['picker', 'supervisor', 'admin'],
-  },
-  {
-    icon: Package,
-    label: 'Pack Orders',
-    to: '/pack',
-    description: 'Pack and dispatch picked orders',
-    roles: ['packer', 'supervisor', 'admin'],
-  },
-  {
-    icon: RotateCcw,
-    label: 'Returns Inward',
-    to: '/returns',
-    description: 'Process customer returns and RTOs',
-    roles: ['returns', 'supervisor', 'admin'],
-  },
-  {
-    icon: ClipboardCheck,
-    label: 'Cycle Count',
-    to: '/count',
-    description: 'Blind count bin locations for accuracy',
-    roles: ['supervisor', 'admin'],
-  },
-  {
-    icon: BarChart3,
-    label: 'Stock on Hand',
-    to: '/stock',
-    description: 'View current inventory across all bins',
-    roles: ['supervisor', 'admin', 'read_only'],
-  },
-  {
-    icon: SettingsIcon,
-    label: 'Settings',
-    to: '/settings',
-    description: 'Configure device, scanner, and system',
-    roles: ['admin'],
-  },
-];
-
-interface ModuleTileProps {
-  tile: TileConfig;
-}
-
-function ModuleTile({ tile }: ModuleTileProps) {
-  const navigate = useNavigate();
-  const Icon = tile.icon;
-  const [hovered, setHovered] = useState(false);
-  const [pressed, setPressed] = useState(false);
+function HorizontalBarChart({ items }: { items: { label: string; value: number; subLabel?: string }[] }) {
+  if (!items.length) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem 0' }}>No data</p>;
+  const max = Math.max(...items.map((i) => i.value));
 
   return (
-    <button
-      onClick={() => navigate(tile.to)}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => { setHovered(false); setPressed(false); }}
-      onMouseDown={() => setPressed(true)}
-      onMouseUp={() => setPressed(false)}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'flex-start',
-        padding: '24px',
-        backgroundColor: '#FFFFFF',
-        border: `1px solid ${hovered ? 'var(--brand-primary)' : 'var(--border)'}`,
-        borderRadius: '8px',
-        cursor: 'pointer',
-        textAlign: 'left',
-        fontFamily: 'inherit',
-        transition:
-          'border-color 150ms ease, box-shadow 150ms ease, transform 100ms ease',
-        boxShadow: hovered
-          ? '0 0 0 3px rgba(11,79,156,0.08)'
-          : '0 1px 3px rgba(0,0,0,0.04)',
-        transform: pressed ? 'scale(0.98)' : 'scale(1)',
-      }}
-    >
-      <Icon
-        size={28}
-        aria-hidden="true"
-        style={{ color: 'var(--brand-primary)', flexShrink: 0 }}
-      />
-      <div
-        style={{
-          fontSize: '16px',
-          fontWeight: 600,
-          color: 'var(--text)',
-          marginTop: '12px',
-          lineHeight: 1.3,
-        }}
-      >
-        {tile.label}
-      </div>
-      <div
-        style={{
-          fontSize: '13px',
-          color: 'var(--text-muted)',
-          marginTop: '4px',
-          lineHeight: 1.45,
-        }}
-      >
-        {tile.description}
-      </div>
-    </button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {items.map((item, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ width: '120px', fontSize: '12px', color: 'var(--text)', textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 0 }} title={item.label}>
+            {item.label}
+          </div>
+          <div style={{ flex: 1, height: '20px', backgroundColor: 'var(--surface-sunken)', borderRadius: '4px', overflow: 'hidden' }}>
+            <div
+              style={{
+                height: '100%',
+                width: max > 0 ? `${(item.value / max) * 100}%` : '0',
+                backgroundColor: 'var(--brand-primary)',
+                borderRadius: '4px',
+                transition: 'width 600ms ease',
+              }}
+            />
+          </div>
+          <div style={{ width: '70px', fontSize: '12px', fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)', textAlign: 'right', flexShrink: 0 }}>
+            {item.subLabel ?? fmtNum(item.value)}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
+
+// ── Donut Chart (SVG) ──────────────────────────────────────────────────────
+
+const DONUT_COLOURS = [
+  '#0B4F9C', '#1A8C5F', '#C47700', '#7B52D0', '#4B6FE3',
+  '#C42B1C', '#0E7A5A', '#8B5E3C', '#2E86AB', '#A23B72',
+];
+
+function DonutChart({ items }: { items: { label: string; value: number }[] }) {
+  if (!items.length) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem 0' }}>No data</p>;
+  const total = items.reduce((s, i) => s + i.value, 0);
+  if (total === 0) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem 0' }}>No stock</p>;
+
+  const r = 60, cx = 70, cy = 70, stroke = 22;
+  const circumference = 2 * Math.PI * r;
+
+  let offset = 0;
+  const slices = items.slice(0, 10).map((item, i) => {
+    const pct = item.value / total;
+    const dash = pct * circumference;
+    const gap = circumference - dash;
+    const slice = { pct, dash, gap, offset, color: DONUT_COLOURS[i % DONUT_COLOURS.length] };
+    offset += dash;
+    return slice;
+  });
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
+      <svg width="140" height="140" viewBox="0 0 140 140" style={{ flexShrink: 0 }}>
+        {slices.map((s, i) => (
+          <circle
+            key={i}
+            cx={cx}
+            cy={cy}
+            r={r}
+            fill="none"
+            stroke={s.color}
+            strokeWidth={stroke}
+            strokeDasharray={`${s.dash} ${s.gap}`}
+            strokeDashoffset={-s.offset + circumference / 4}
+            style={{ transform: 'rotate(-90deg)', transformOrigin: `${cx}px ${cy}px` }}
+          />
+        ))}
+        <text x={cx} y={cy - 6} textAnchor="middle" fontSize="11" fill="var(--text-muted)">Total</text>
+        <text x={cx} y={cy + 12} textAnchor="middle" fontSize="14" fontWeight="700" fill="var(--text)">{fmtNum(total)}</text>
+      </svg>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
+        {items.slice(0, 8).map((item, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+            <div style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: DONUT_COLOURS[i % DONUT_COLOURS.length], flexShrink: 0 }} />
+            <span style={{ color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
+            <span style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', marginLeft: 'auto', flexShrink: 0, paddingLeft: '8px' }}>{fmtNum(item.value)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Quick Actions ──────────────────────────────────────────────────────────
+
+const QUICK_ACTIONS = [
+  { label: 'Receive GRN', icon: ArrowDownToLine, to: '/inward' },
+  { label: 'Putaway', icon: MapPin, to: '/putaway' },
+  { label: 'Pack Order', icon: Package, to: '/pack' },
+  { label: 'Returns', icon: RotateCcw, to: '/returns' },
+];
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function Home() {
   const user = useSessionStore((s) => s.user);
-  const role = (user?.role ?? '') as UserRole;
+  const navigate = useNavigate();
 
-  const visibleTiles = TILES.filter((t) => t.roles.includes(role));
+  useEffect(() => { document.title = 'Fabb6 WMS — Home'; }, []);
+
+  const { data: stats, isLoading } = useQuery<DashboardStats>({
+    queryKey: ['dashboard', 'stats'],
+    queryFn: () => apiClient<DashboardStats>('/dashboard/stats'),
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+  });
+
+  const top10Items = (stats?.top10Skus ?? []).map((s) => ({
+    label: s.skuCode,
+    value: s.value,
+    subLabel: fmtINR(s.value),
+  }));
+
+  const brandItems = (stats?.brandStock ?? []).map((b) => ({
+    label: b.brand,
+    value: b.qty,
+  }));
 
   return (
     <DeskLayout heading="Home" title="Home">
       <style>{`
-        @keyframes kpi-shimmer {
-          0%   { background-position: 200% 0; }
+        @keyframes shimmer {
+          0% { background-position: 200% 0; }
           100% { background-position: -200% 0; }
         }
       `}</style>
 
       {/* Greeting */}
-      <div style={{ marginBottom: '28px' }}>
-        <h2
-          style={{
-            margin: 0,
-            fontSize: '22px',
-            fontWeight: 700,
-            color: 'var(--text)',
-            letterSpacing: '-0.015em',
-          }}
-        >
+      <div style={{ marginBottom: '24px' }}>
+        <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.015em' }}>
           {getGreeting()}{user?.name ? `, ${user.name}` : ''}.
         </h2>
-        <p
-          style={{
-            margin: '4px 0 0',
-            fontSize: '14px',
-            color: 'var(--text-muted)',
-          }}
-        >
+        <p style={{ margin: '4px 0 0', fontSize: '14px', color: 'var(--text-muted)' }}>
           {getDateLabel()}
         </p>
       </div>
 
-      {/* KPI bar */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-          gap: '12px',
-          marginBottom: '32px',
-        }}
-      >
-        {KPI_CARDS.map((kpi) => (
-          <KpiCard key={kpi.label} {...kpi} />
-        ))}
+      {/* KPI cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px', marginBottom: '28px' }}>
+        <KpiCard label="Total SKUs" value={fmtNum(stats?.totalSkus ?? 0)} loading={isLoading} accent="#0B4F9C" />
+        <KpiCard label="Stock Value" value={fmtINR(stats?.stockValue ?? 0)} loading={isLoading} accent="#1A8C5F" />
+        <KpiCard
+          label="Low Stock Alerts"
+          value={fmtNum(stats?.lowStockAlerts ?? 0)}
+          subtext="SKUs with qty < 10"
+          loading={isLoading}
+          accent={stats?.lowStockAlerts ? '#C42B1C' : '#9ca3af'}
+        />
+        <KpiCard label="Today's Movements" value={fmtNum(stats?.todayMovements ?? 0)} loading={isLoading} accent="#C47700" />
       </div>
 
-      {/* Module tiles */}
-      {visibleTiles.length > 0 ? (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns:
-              'repeat(auto-fill, minmax(220px, 1fr))',
-            gap: '16px',
-          }}
-        >
-          {visibleTiles.map((tile) => (
-            <ModuleTile key={tile.to} tile={tile} />
+      {/* Charts row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px', marginBottom: '28px' }}>
+        {/* Top 10 SKUs by value */}
+        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid var(--border)', borderRadius: '10px', padding: '20px' }}>
+          <h3 style={{ margin: '0 0 16px', fontSize: '14px', fontWeight: 600, color: 'var(--text)' }}>
+            Top 10 SKUs by Value
+          </h3>
+          {isLoading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} style={{ height: '20px', backgroundColor: 'var(--border)', borderRadius: '4px', width: `${60 + (i * 7) % 35}%` }} />
+              ))}
+            </div>
+          ) : (
+            <HorizontalBarChart items={top10Items} />
+          )}
+        </div>
+
+        {/* Stock by brand */}
+        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid var(--border)', borderRadius: '10px', padding: '20px' }}>
+          <h3 style={{ margin: '0 0 16px', fontSize: '14px', fontWeight: 600, color: 'var(--text)' }}>
+            Stock by Brand (qty)
+          </h3>
+          {isLoading ? (
+            <div style={{ height: '140px', backgroundColor: 'var(--border)', borderRadius: '50%', width: '140px', margin: '0 auto' }} />
+          ) : (
+            <DonutChart items={brandItems} />
+          )}
+        </div>
+      </div>
+
+      {/* Recent activity */}
+      <div style={{ backgroundColor: '#FFFFFF', border: '1px solid var(--border)', borderRadius: '10px', marginBottom: '28px', overflow: 'hidden' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+          <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: 'var(--text)' }}>Recent Activity</h3>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <thead>
+              <tr style={{ backgroundColor: 'var(--surface-sunken)' }}>
+                {['Time', 'SKU', 'Type', 'Qty', 'From → To', 'User'].map((h) => (
+                  <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                    {Array.from({ length: 6 }).map((_, j) => (
+                      <td key={j} style={{ padding: '10px 16px' }}>
+                        <div style={{ height: '13px', backgroundColor: 'var(--border)', borderRadius: '3px', width: `${50 + (j * 11) % 40}%` }} />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : stats?.recentActivity.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    No stock movements recorded yet
+                  </td>
+                </tr>
+              ) : (
+                stats?.recentActivity.map((a) => (
+                  <tr key={a.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '10px 16px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                      {relativeTime(a.createdAt)}
+                    </td>
+                    <td style={{ padding: '10px 16px', fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', whiteSpace: 'nowrap' }}>
+                      {a.skuCode}
+                    </td>
+                    <td style={{ padding: '10px 16px', whiteSpace: 'nowrap' }}>
+                      {fmtMovementType(a.movementType)}
+                    </td>
+                    <td style={{ padding: '10px 16px', fontVariantNumeric: 'tabular-nums', textAlign: 'right', fontWeight: 600 }}>
+                      {fmtNum(a.quantity)}
+                    </td>
+                    <td style={{ padding: '10px 16px', fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                      {a.fromLoc && a.toLoc ? `${a.fromLoc} → ${a.toLoc}` : (a.fromLoc ?? a.toLoc ?? '—')}
+                    </td>
+                    <td style={{ padding: '10px 16px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                      {a.userName ?? '—'}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Quick actions */}
+      <div>
+        <h3 style={{ margin: '0 0 12px', fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Quick Actions
+        </h3>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          {QUICK_ACTIONS.map(({ label, icon: Icon, to }) => (
+            <Button key={to} variant="secondary" size="md" onClick={() => navigate(to)}>
+              <Icon size={15} style={{ marginRight: '6px' }} />
+              {label}
+            </Button>
           ))}
         </div>
-      ) : (
-        <div
-          style={{
-            padding: '48px 24px',
-            textAlign: 'center',
-            color: 'var(--text-muted)',
-            fontSize: '15px',
-          }}
-        >
-          No modules available for your role.
-          <br />
-          Contact your supervisor.
-        </div>
-      )}
+      </div>
     </DeskLayout>
   );
 }

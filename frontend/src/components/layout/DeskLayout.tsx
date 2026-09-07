@@ -285,17 +285,19 @@ export function DeskLayout({
         }}
       >
         {!isCollapsed && (
-          <span
-            style={{
-              fontSize: '15px',
-              fontWeight: 700,
-              color: 'var(--brand-primary)',
-              letterSpacing: '-0.01em',
-              whiteSpace: 'nowrap',
+          <img
+            src="https://fabb6.com/cdn/shop/files/FTM.webp"
+            alt="Fabb6"
+            style={{ maxHeight: '36px', objectFit: 'contain', display: 'block' }}
+            onError={(e) => {
+              const el = e.currentTarget;
+              el.style.display = 'none';
+              const span = document.createElement('span');
+              span.textContent = 'Fabb6 WMS';
+              span.style.cssText = 'font-size:15px;font-weight:700;color:var(--brand-primary);letter-spacing:-0.01em;white-space:nowrap;';
+              el.parentNode?.insertBefore(span, el);
             }}
-          >
-            Fabb6 WMS
-          </span>
+          />
         )}
         <button
           onClick={toggle}

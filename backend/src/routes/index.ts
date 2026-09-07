@@ -16,6 +16,7 @@ import reportsRouter from './reports.js';
 import printJobsRouter from './print-jobs.js';
 import shippingRouter from './shipping.js';
 import vendorsRouter from './vendors.js';
+import dashboardRouter from './dashboard.js';
 
 const router = Router();
 
@@ -67,5 +68,8 @@ router.use('/shipping', shippingRouter);
 
 // Vendors (supplier management)
 router.use('/vendors', vendorsRouter);
+
+// Dashboard analytics
+router.use('/dashboard', dashboardRouter);
 
 export default router;

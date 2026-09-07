@@ -96,32 +96,11 @@ export default function Login() {
     >
       {/* Logo */}
       <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-        <div
-          style={{
-            width: '80px',
-            height: '80px',
-            borderRadius: '20px',
-            backgroundColor: 'var(--brand-primary)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            margin: '0 auto 1rem',
-          }}
-        >
-          <span style={{ color: '#fff', fontSize: '2rem', fontWeight: 800, letterSpacing: '-0.05em' }}>
-            F6
-          </span>
-        </div>
-        <h1
-          style={{
-            margin: 0,
-            fontSize: '1.75rem',
-            fontWeight: 700,
-            color: 'var(--brand-primary)',
-          }}
-        >
-          Fabb6 WMS
-        </h1>
+        <img
+          src="https://fabb6.com/cdn/shop/files/FTM.webp"
+          alt="Fabb6"
+          style={{ maxHeight: '80px', display: 'block', margin: '0 auto 1rem', objectFit: 'contain' }}
+        />
         <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)', fontSize: '0.95rem' }}>
           Enter your PIN to continue
         </p>

@@ -22,6 +22,7 @@ const Settings = lazy(() => import('@/pages/settings/Settings'));
 const PurchaseOrders = lazy(() => import('@/pages/inward/PurchaseOrders'));
 const CreatePO = lazy(() => import('@/pages/inward/CreatePO'));
 const Vendors = lazy(() => import('@/pages/vendors/Vendors'));
+const Reports = lazy(() => import('@/pages/reports/Reports'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -138,8 +139,8 @@ export default function App() {
                       {/* Settings */}
                       <Route path="/settings" element={<Settings />} />
 
-                      {/* Reports — placeholder redirect to stock */}
-                      <Route path="/reports" element={<Navigate to="/stock" replace />} />
+                      {/* Reports */}
+                      <Route path="/reports" element={<Reports />} />
 
                       {/* Fallback */}
                       <Route path="*" element={<Navigate to="/home" replace />} />
