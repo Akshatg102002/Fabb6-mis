@@ -61,7 +61,7 @@ export function usePO(id: string) {
 
 export interface CreatePOPayload {
   supplier_id: string;
-  site_id: string;
+  site_id?: string;
   po_number: string;
   expected_date?: string;
   notes?: string;

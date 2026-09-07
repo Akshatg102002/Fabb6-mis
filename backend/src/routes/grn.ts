@@ -44,6 +44,7 @@ router.get('/grn', requireAuth, async (req, res) => {
       ? (statusMap[frontendStatus] ?? frontendStatus)
       : null;
 
+  try {
   const result = await pool.query<{
     id: string;
     reference: string;
@@ -79,7 +80,7 @@ router.get('/grn', requireAuth, async (req, res) => {
         SUM(qty_accepted) AS total_expected
       FROM grn_lines gl WHERE gl.grn_id = g.id
     ) lc ON true
-    WHERE ($1::text IS NULL OR g.status = $1)
+    WHERE ($1::text IS NULL OR g.status::text = $1)
     ORDER BY g.created_at DESC
     LIMIT 50`,
     [backendStatus],
@@ -134,6 +135,10 @@ router.get('/grn', requireAuth, async (req, res) => {
   }));
 
   res.json(rows);
+  } catch (err) {
+    console.error('GET /grn error:', err);
+    res.status(500).json({ error: 'Failed to fetch GRNs' });
+  }
 });
 
 // ── GET /grn/next-ref — auto-generate next GRN number ───────────────────────
@@ -301,7 +306,7 @@ router.post(
   async (req, res) => {
     const body = req.body as {
       supplier_id: string;
-      site_id: string;
+      site_id?: string;
       po_number: string;
       expected_date?: string;
       notes?: string;
@@ -313,6 +318,19 @@ router.post(
       }[];
     };
 
+    // Auto-resolve site_id if not provided — use first active site
+    let siteId = body.site_id ?? '';
+    if (!siteId) {
+      const siteResult = await pool.query<{ id: string }>(
+        `SELECT id FROM sites WHERE is_active = true ORDER BY name LIMIT 1`,
+      );
+      siteId = siteResult.rows[0]?.id ?? '';
+      if (!siteId) {
+        res.status(400).json({ error: 'No active site found. Configure a warehouse site first.' });
+        return;
+      }
+    }
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -322,7 +340,7 @@ router.post(
          VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
         [
           body.supplier_id,
-          body.site_id,
+          siteId,
           body.po_number,
           body.expected_date ?? null,
           body.notes ?? null,

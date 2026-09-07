@@ -374,23 +374,23 @@ function CreatePOForm() {
     setError(null);
     setSaving(true);
 
-    // Resolve site_id from localStorage first, then API
+    // Resolve site_id — non-blocking: backend auto-selects first active site if omitted
     let siteId = '';
     try { siteId = localStorage.getItem('fabb6_site_id') ?? ''; } catch { /* ignore */ }
     if (!siteId) {
       try {
-        const sites = await apiClient<Array<{ id: string; is_active: boolean }>>('/locations/sites');
-        const active = sites.find((s) => s.is_active) ?? sites[0];
+        const sitesRes = await apiClient<Array<{ id: string; is_active: boolean }>>('/locations/sites');
+        const active = sitesRes.find((s) => s.is_active) ?? sitesRes[0];
         siteId = active?.id ?? '';
-      } catch (e) {
-        console.error('Failed to fetch sites for PO creation', e);
+      } catch {
+        // Non-critical — backend will auto-select the first active site
       }
     }
 
     try {
       const result = await createPO.mutateAsync({
         supplier_id: supplierId,
-        site_id: siteId,
+        site_id: siteId || undefined,
         po_number: poNumber.trim(),
         expected_date: expectedDate || undefined,
         notes: notes || undefined,

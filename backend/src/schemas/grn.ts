@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const createPoSchema = z.object({
   supplier_id: z.string().uuid(),
-  site_id: z.string().uuid(),
+  site_id: z.string().uuid().optional(),
   po_number: z.string().min(1).max(50),
   expected_date: z.string().optional(),
   notes: z.string().max(2000).optional(),

@@ -51,6 +51,48 @@ router.get(
   },
 );
 
+// ── Sites sub-routes ──────────────────────────────────────────────────────────
+// Must be registered BEFORE /:id so "sites" is not treated as a UUID param.
+
+// GET /locations/sites
+router.get('/sites', requireAuth, async (_req, res) => {
+  const rows = await db.select().from(sites).orderBy(sites.name);
+  res.json(rows);
+});
+
+// POST /sites (admin)
+router.post(
+  '/sites',
+  requireAuth,
+  requireRoles('admin'),
+  validate({ body: createSiteSchema }),
+  async (req, res) => {
+    const [created] = await db.insert(sites).values(req.body as typeof sites.$inferInsert).returning();
+    res.status(201).json(created);
+  },
+);
+
+// PUT /sites/:id (admin)
+router.put(
+  '/sites/:id',
+  requireAuth,
+  requireRoles('admin'),
+  validate({ params: z.object({ id: z.string().uuid() }), body: updateSiteSchema }),
+  async (req, res) => {
+    const existing = await db.query.sites.findFirst({ where: eq(sites.id, req.params['id'] as string) });
+    if (!existing) {
+      res.status(404).json({ error: 'Site not found' });
+      return;
+    }
+    const [updated] = await db
+      .update(sites)
+      .set(req.body as Partial<typeof sites.$inferInsert>)
+      .where(eq(sites.id, req.params['id'] as string))
+      .returning();
+    res.json(updated);
+  },
+);
+
 // GET /locations/:id
 router.get(
   '/:id',
@@ -119,47 +161,6 @@ router.put(
       .where(eq(locations.id, req.params['id'] as string))
       .returning();
 
-    res.json(updated);
-  },
-);
-
-// ── Sites sub-routes ──────────────────────────────────────────────────────────
-
-// GET /sites
-router.get('/sites', requireAuth, async (_req, res) => {
-  const rows = await db.select().from(sites).orderBy(sites.name);
-  res.json({ data: rows });
-});
-
-// POST /sites (admin)
-router.post(
-  '/sites',
-  requireAuth,
-  requireRoles('admin'),
-  validate({ body: createSiteSchema }),
-  async (req, res) => {
-    const [created] = await db.insert(sites).values(req.body as typeof sites.$inferInsert).returning();
-    res.status(201).json(created);
-  },
-);
-
-// PUT /sites/:id (admin)
-router.put(
-  '/sites/:id',
-  requireAuth,
-  requireRoles('admin'),
-  validate({ params: z.object({ id: z.string().uuid() }), body: updateSiteSchema }),
-  async (req, res) => {
-    const existing = await db.query.sites.findFirst({ where: eq(sites.id, req.params['id'] as string) });
-    if (!existing) {
-      res.status(404).json({ error: 'Site not found' });
-      return;
-    }
-    const [updated] = await db
-      .update(sites)
-      .set(req.body as Partial<typeof sites.$inferInsert>)
-      .where(eq(sites.id, req.params['id'] as string))
-      .returning();
     res.json(updated);
   },
 );
