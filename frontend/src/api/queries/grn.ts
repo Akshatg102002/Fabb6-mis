@@ -26,6 +26,8 @@ export interface GRN {
   createdAt: string;
   expectedAt: string | null;
   receivedAt: string | null;
+  /** Actual line count from the server (use instead of lines.length for list views) */
+  lineCount?: number;
   lines: GRNLine[];
 }
 

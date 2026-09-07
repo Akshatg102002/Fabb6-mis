@@ -25,6 +25,173 @@ import { z } from 'zod';
 
 const router = Router();
 
+// ── Frontend compatibility: GET /grn ─────────────────────────────────────────
+// The frontend calls /api/v1/grn?status=open; map to backend status values.
+
+router.get('/grn', requireAuth, async (req, res) => {
+  const frontendStatus = req.query['status'] as string | undefined;
+
+  // Map frontend status values to backend enum values
+  const statusMap: Record<string, string> = {
+    open: 'in_progress',
+    partial: 'in_progress',
+    complete: 'completed',
+    closed: 'posted',
+  };
+
+  const backendStatus =
+    frontendStatus
+      ? (statusMap[frontendStatus] ?? frontendStatus)
+      : null;
+
+  const result = await pool.query<{
+    id: string;
+    reference: string;
+    status: string;
+    createdAt: Date;
+    receivedAt: Date | null;
+    expectedAt: Date | null;
+    supplierId: string;
+    supplierName: string;
+    line_count: string;
+    total_received: string;
+    total_expected: string;
+  }>(
+    `SELECT
+      g.id,
+      g.grn_number AS reference,
+      g.status,
+      g.created_at AS "createdAt",
+      g.received_at AS "receivedAt",
+      po.expected_date AS "expectedAt",
+      COALESCE(s.id::text, '') AS "supplierId",
+      COALESCE(s.name, 'Unknown Supplier') AS "supplierName",
+      COALESCE(lc.line_count, 0) AS line_count,
+      COALESCE(lc.total_received, 0) AS total_received,
+      COALESCE(lc.total_expected, 0) AS total_expected
+    FROM grns g
+    LEFT JOIN purchase_orders po ON po.id = g.po_id
+    LEFT JOIN suppliers s ON s.id = po.supplier_id
+    LEFT JOIN LATERAL (
+      SELECT
+        COUNT(*) AS line_count,
+        SUM(qty_received) AS total_received,
+        SUM(qty_accepted) AS total_expected
+      FROM grn_lines gl WHERE gl.grn_id = g.id
+    ) lc ON true
+    WHERE ($1::text IS NULL OR g.status = $1)
+    ORDER BY g.created_at DESC
+    LIMIT 50`,
+    [backendStatus],
+  );
+
+  // Map backend status back to frontend values
+  const reverseStatusMap: Record<string, string> = {
+    in_progress: 'open',
+    completed: 'complete',
+    posted: 'closed',
+  };
+
+  const rows = result.rows.map((row) => ({
+    id: row.id,
+    reference: row.reference,
+    supplierId: row.supplierId,
+    supplierName: row.supplierName,
+    status: (reverseStatusMap[row.status] ?? row.status) as
+      | 'draft'
+      | 'open'
+      | 'partial'
+      | 'complete'
+      | 'closed',
+    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+    expectedAt: row.expectedAt
+      ? row.expectedAt instanceof Date
+        ? row.expectedAt.toISOString()
+        : row.expectedAt
+      : null,
+    receivedAt: row.receivedAt
+      ? row.receivedAt instanceof Date
+        ? row.receivedAt.toISOString()
+        : row.receivedAt
+      : null,
+    lineCount: Number(row.line_count),
+    lines:
+      Number(row.line_count) > 0
+        ? [
+            {
+              id: row.id + '-summary',
+              grnId: row.id,
+              sku: '',
+              skuName: `${row.line_count} items`,
+              barcode: '',
+              expectedQty: Number(row.total_expected),
+              receivedQty: Number(row.total_received),
+              uom: 'EACH',
+              status: 'partial',
+            },
+          ]
+        : [],
+  }));
+
+  res.json(rows);
+});
+
+// ── Frontend compatibility: POST /grn (blind receive) ────────────────────────
+
+router.post('/grn', requireAuth, async (req, res) => {
+  const body = req.body as { reference?: string; blind?: boolean };
+
+  if (!body.reference || body.reference.trim() === '') {
+    res.status(400).json({ error: 'reference is required' });
+    return;
+  }
+
+  const reference = body.reference.trim();
+
+  // Get first available site
+  const siteResult = await pool.query<{ id: string }>(
+    `SELECT id FROM sites LIMIT 1`,
+  );
+
+  if ((siteResult.rowCount ?? 0) === 0) {
+    res.status(500).json({ error: 'No site configured' });
+    return;
+  }
+
+  const siteId = siteResult.rows[0]!.id;
+
+  const insertResult = await pool.query<{
+    id: string;
+    grn_number: string;
+    status: string;
+    created_at: Date;
+    received_at: Date | null;
+    site_id: string;
+    po_id: string | null;
+    supplier_invoice_no: string | null;
+    received_by: string | null;
+  }>(
+    `INSERT INTO grns (po_id, received_by, site_id, status, grn_number, supplier_invoice_no)
+     VALUES (NULL, $1, $2, 'in_progress', $3, $3)
+     RETURNING *`,
+    [req.auth!.userId, siteId, reference],
+  );
+
+  const grn = insertResult.rows[0]!;
+
+  res.status(201).json({
+    id: grn.id,
+    reference: grn.grn_number,
+    status: 'open',
+    supplierId: '',
+    supplierName: 'Unknown Supplier',
+    createdAt: grn.created_at instanceof Date ? grn.created_at.toISOString() : grn.created_at,
+    expectedAt: null,
+    receivedAt: null,
+    lines: [],
+  });
+});
+
 // ── Purchase Orders ─────────────────────────────────────────────────────────
 
 // GET /purchase-orders

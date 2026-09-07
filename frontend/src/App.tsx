@@ -19,6 +19,8 @@ const CycleCount = lazy(() => import('@/pages/counting/CycleCount'));
 const ReturnInward = lazy(() => import('@/pages/returns/ReturnInward'));
 const StockOnHand = lazy(() => import('@/pages/stock/StockOnHand'));
 const Settings = lazy(() => import('@/pages/settings/Settings'));
+const PurchaseOrders = lazy(() => import('@/pages/inward/PurchaseOrders'));
+const CreatePO = lazy(() => import('@/pages/inward/CreatePO'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -95,6 +97,11 @@ export default function App() {
                       {/* Inward */}
                       <Route path="/inward" element={<GRN />} />
                       <Route path="/inward/receive/:grnId" element={<ReceiveItem />} />
+
+                      {/* Purchase Orders */}
+                      <Route path="/inward/purchase-orders" element={<PurchaseOrders />} />
+                      <Route path="/inward/purchase-orders/create" element={<CreatePO />} />
+                      <Route path="/inward/purchase-orders/:poId" element={<CreatePO />} />
 
                       {/* Putaway */}
                       <Route path="/putaway" element={<Putaway />} />

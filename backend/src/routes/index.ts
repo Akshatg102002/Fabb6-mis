@@ -14,6 +14,8 @@ import adjustmentsRouter from './adjustments.js';
 import transfersRouter from './transfers.js';
 import reportsRouter from './reports.js';
 import printJobsRouter from './print-jobs.js';
+import shippingRouter from './shipping.js';
+import vendorsRouter from './vendors.js';
 
 const router = Router();
 
@@ -59,5 +61,11 @@ router.use('/reports', reportsRouter);
 
 // Print jobs
 router.use('/print-jobs', printJobsRouter);
+
+// Shipping manifests & webhooks
+router.use('/shipping', shippingRouter);
+
+// Vendors (supplier management)
+router.use('/vendors', vendorsRouter);
 
 export default router;

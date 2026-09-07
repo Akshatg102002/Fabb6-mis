@@ -5,7 +5,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import {
   ArrowDownToLine,
   BarChart3,
@@ -13,11 +13,13 @@ import {
   ChevronRight,
   ClipboardCheck,
   FileText,
+  Home as HomeIcon,
   MapPin,
   Package,
   RotateCcw,
   Settings as SettingsIcon,
   ShoppingCart,
+  ShoppingBag,
 } from 'lucide-react';
 import { SyncStatusBar } from './SyncStatusBar';
 import { useSessionStore, type UserRole } from '@/stores/sessionStore';
@@ -51,6 +53,18 @@ const NAV_SECTIONS: NavSection[] = [
   {
     header: 'Operations',
     items: [
+      {
+        label: 'Home',
+        to: '/home',
+        icon: HomeIcon,
+        roles: ['picker', 'packer', 'inward', 'returns', 'supervisor', 'admin', 'read_only'],
+      },
+      {
+        label: 'Purchase Orders',
+        to: '/inward/purchase-orders',
+        icon: ShoppingBag,
+        roles: ['inward', 'supervisor', 'admin'],
+      },
       {
         label: 'Inward',
         to: '/inward',
@@ -160,7 +174,6 @@ export function DeskLayout({
 }: DeskLayoutProps) {
   const user = useSessionStore((s) => s.user);
   const logout = useSessionStore((s) => s.logout);
-  const { pathname } = useLocation();
 
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
@@ -347,19 +360,19 @@ export function DeskLayout({
               </div>
             )}
             {section.items.map((item) => {
-              const active =
-                item.to === '/'
-                  ? pathname === '/'
-                  : pathname.startsWith(item.to);
               const Icon = item.icon;
+              // /home and /inward need end-matching so /inward/purchase-orders
+              // doesn't also highlight /inward
+              const endMatch = item.to === '/home';
 
               return (
-                <Link
+                <NavLink
                   key={item.to}
                   to={item.to}
+                  end={endMatch}
                   title={isCollapsed ? item.label : undefined}
                   onClick={() => isMobile && setDrawerOpen(false)}
-                  style={{
+                  style={({ isActive }) => ({
                     display: 'flex',
                     alignItems: 'center',
                     gap: isCollapsed ? 0 : '12px',
@@ -370,25 +383,23 @@ export function DeskLayout({
                     marginBottom: '2px',
                     textDecoration: 'none',
                     fontSize: '14px',
-                    fontWeight: active ? 600 : 500,
-                    color: active ? '#FFFFFF' : 'var(--text)',
-                    backgroundColor: active
-                      ? 'var(--brand-primary)'
-                      : 'transparent',
+                    fontWeight: isActive ? 600 : 500,
+                    color: isActive ? '#FFFFFF' : 'var(--text)',
+                    backgroundColor: isActive ? 'var(--brand-primary)' : 'transparent',
                     transition: 'background-color 150ms ease, color 150ms ease',
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
-                  }}
+                  })}
                   onMouseEnter={(e) => {
-                    if (!active) {
-                      (e.currentTarget as HTMLAnchorElement).style.backgroundColor =
-                        'var(--surface-sunken)';
+                    const el = e.currentTarget as HTMLAnchorElement;
+                    if (!el.style.backgroundColor.includes('var(--brand')) {
+                      el.style.backgroundColor = 'var(--surface-sunken)';
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (!active) {
-                      (e.currentTarget as HTMLAnchorElement).style.backgroundColor =
-                        'transparent';
+                    const el = e.currentTarget as HTMLAnchorElement;
+                    if (!el.style.backgroundColor.includes('var(--brand')) {
+                      el.style.backgroundColor = 'transparent';
                     }
                   }}
                 >
@@ -398,7 +409,7 @@ export function DeskLayout({
                     style={{ flexShrink: 0 }}
                   />
                   {!isCollapsed && <span>{item.label}</span>}
-                </Link>
+                </NavLink>
               );
             })}
           </div>
@@ -633,23 +644,21 @@ export function DeskLayout({
                     >
                       {i > 0 && <span aria-hidden="true">/</span>}
                       {crumb.to ? (
-                        <Link
+                        <NavLink
                           to={crumb.to}
                           style={{
                             color: 'var(--text-muted)',
                             textDecoration: 'none',
                           }}
-                          onMouseEnter={(e) => {
-                            (e.currentTarget as HTMLAnchorElement).style.textDecoration =
-                              'underline';
+                          onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => {
+                            e.currentTarget.style.textDecoration = 'underline';
                           }}
-                          onMouseLeave={(e) => {
-                            (e.currentTarget as HTMLAnchorElement).style.textDecoration =
-                              'none';
+                          onMouseLeave={(e: React.MouseEvent<HTMLAnchorElement>) => {
+                            e.currentTarget.style.textDecoration = 'none';
                           }}
                         >
                           {crumb.label}
-                        </Link>
+                        </NavLink>
                       ) : (
                         <span>{crumb.label}</span>
                       )}

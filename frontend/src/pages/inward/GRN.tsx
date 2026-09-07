@@ -35,6 +35,7 @@ function statusBadge(status: GRNStatus) {
 function GRNCard({ grn, onSelect }: { grn: GRNType; onSelect: () => void }) {
   const received = grn.lines.reduce((s, l) => s + l.receivedQty, 0);
   const expected = grn.lines.reduce((s, l) => s + l.expectedQty, 0);
+  const lineCount = grn.lineCount ?? grn.lines.length;
 
   return (
     <button
@@ -68,7 +69,7 @@ function GRNCard({ grn, onSelect }: { grn: GRNType; onSelect: () => void }) {
         {statusBadge(grn.status)}
       </div>
       <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-        {grn.lines.length} line{grn.lines.length !== 1 ? 's' : ''} &middot;{' '}
+        {lineCount} line{lineCount !== 1 ? 's' : ''} &middot;{' '}
         <span className="tabular">{received}</span> / <span className="tabular">{expected}</span> received
       </div>
       {grn.expectedAt && (

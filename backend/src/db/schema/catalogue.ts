@@ -66,6 +66,8 @@ export const suppliers = pgTable('suppliers', {
   contact_name: varchar('contact_name', { length: 255 }),
   contact_phone: varchar('contact_phone', { length: 20 }),
   contact_email: varchar('contact_email', { length: 255 }),
+  vendor_code: varchar('vendor_code', { length: 50 }),
+  city: varchar('city', { length: 100 }),
   address: text('address'),
   is_active: boolean('is_active').notNull().default(true),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
