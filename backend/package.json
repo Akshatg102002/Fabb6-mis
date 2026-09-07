@@ -14,12 +14,14 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@types/nodemailer": "^8.0.1",
     "argon2": "^0.41.0",
     "compression": "^1.7.4",
+    "drizzle-orm": "^0.38.0",
     "express": "^5.0.0",
     "express-rate-limit": "^7.4.0",
-    "drizzle-orm": "^0.38.0",
     "helmet": "^8.0.0",
+    "nodemailer": "^10.0.1",
     "pg": "^8.13.0",
     "pg-boss": "^10.1.0",
     "pino": "^9.5.0",

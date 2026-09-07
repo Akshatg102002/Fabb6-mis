@@ -117,14 +117,10 @@ const today = new Date().toISOString().split('T')[0]!;
 
 async function lookupSkuByCode(code: string): Promise<{ id: string; name: string } | null> {
   try {
-    const res = await apiClient<{ items?: { id: string; name: string; code: string }[]; data?: { id: string; name: string; code: string }[] } | { id: string; name: string; code: string }[]>(
-      `/skus?search=${encodeURIComponent(code)}`,
+    const res = await apiClient<{ data: { id: string; name: string; code: string }[] }>(
+      `/skus?code=${encodeURIComponent(code.trim())}`,
     );
-    const items: { id: string; name: string; code: string }[] = Array.isArray(res)
-      ? res
-      : ((res as { items?: { id: string; name: string; code: string }[] }).items ??
-         (res as { data?: { id: string; name: string; code: string }[] }).data ?? []);
-    return items.find((s) => s.code.toLowerCase() === code.toLowerCase()) ?? null;
+    return res.data[0] ?? null;
   } catch {
     return null;
   }

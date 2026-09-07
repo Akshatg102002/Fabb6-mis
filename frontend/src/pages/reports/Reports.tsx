@@ -110,7 +110,10 @@ interface ValuationResponse {
 function StockValuationTab() {
   const user = useSessionStore((s) => s.user);
   const { data: sites } = useSites();
-  const [siteId, setSiteId] = useState(user?.site_id ?? '');
+  const [siteId, setSiteId] = useState(() => {
+    try { return localStorage.getItem('fabb6_site_id') ?? user?.site_id ?? ''; }
+    catch { return user?.site_id ?? ''; }
+  });
 
   useEffect(() => {
     if (!siteId && sites && sites.length > 0) setSiteId(sites[0]!.id);
@@ -143,10 +146,6 @@ function StockValuationTab() {
   return (
     <div>
       <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
-        <select value={siteId} onChange={(e) => setSiteId(e.target.value)} style={{ ...inputStyle, minWidth: '200px' }}>
-          <option value="">Select site…</option>
-          {sites?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
         {data && (
           <Button variant="secondary" size="sm" onClick={handleDownload}>
             ↓ Download CSV
@@ -158,8 +157,6 @@ function StockValuationTab() {
           </span>
         )}
       </div>
-
-      {!siteId && <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '3rem 0' }}>Select a site to view stock valuation.</p>}
       {isLoading && <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '3rem 0' }}>Loading…</p>}
       {error && <p style={{ color: 'var(--scan-error)', textAlign: 'center' }}>Failed to load stock valuation.</p>}
 

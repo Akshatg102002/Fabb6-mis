@@ -11,11 +11,13 @@ import {
   CheckCircle2,
   AlertCircle,
   Plus,
-  Trash2,
+  Mail,
 } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DeskLayout } from '@/components/layout/DeskLayout';
 import StockImport from './StockImport';
 import { useSessionStore } from '@/stores/sessionStore';
+import { apiClient } from '@/api/client';
 
 // ── Shared UI ─────────────────────────────────────────────────────────────────
 
@@ -715,38 +717,77 @@ const ROLE_BADGE: Record<string, { color: string; bg: string }> = {
   read_only:  { color: '#5A6884', bg: '#F5F7FA' },
 };
 
-interface UserEntry {
+interface ApiUser {
   id: string;
   name: string;
+  email: string | null;
   role: string;
-  pin: string;
+  is_active: boolean;
+  last_login_at: string | null;
+  created_at: string;
 }
 
 function UsersSettings() {
-  const [users, setUsers] = useState<UserEntry[]>([
-    { id: '1', name: 'Fabb6_Admin', role: 'admin', pin: '****' },
-    { id: '2', name: 'Warehouse Supervisor', role: 'supervisor', pin: '****' },
-    { id: '3', name: 'Picker 1', role: 'picker', pin: '****' },
-    { id: '4', name: 'Packer 1', role: 'packer', pin: '****' },
-    { id: '5', name: 'Inward Operator', role: 'inward', pin: '****' },
-  ]);
+  const qc = useQueryClient();
+  const { data: users, isLoading } = useQuery<ApiUser[]>({
+    queryKey: ['admin-users'],
+    queryFn: () => apiClient<ApiUser[]>('/users'),
+    staleTime: 30_000,
+  });
+
   const [showAdd, setShowAdd] = useState(false);
-  const [newUser, setNewUser] = useState({ name: '', role: 'picker', pin: '' });
-  const [notice, setNotice] = useState('');
+  const [newUser, setNewUser] = useState({ name: '', role: 'picker', pin: '', confirmPin: '', email: '' });
+  const [notice, setNotice] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null);
+  const [editPinId, setEditPinId] = useState<string | null>(null);
+  const [editPin, setEditPin] = useState('');
+
+  const createUser = useMutation({
+    mutationFn: (body: { name: string; role: string; pin: string; email?: string }) =>
+      apiClient('/users', { method: 'POST', body }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['admin-users'] });
+      setShowAdd(false);
+      setNewUser({ name: '', role: 'picker', pin: '', confirmPin: '', email: '' });
+      setNotice({ type: 'ok', msg: 'User created successfully.' });
+      setTimeout(() => setNotice(null), 3000);
+    },
+    onError: (e: Error) => setNotice({ type: 'err', msg: e.message }),
+  });
+
+  const updateUser = useMutation({
+    mutationFn: ({ id, ...body }: { id: string; is_active?: boolean; new_pin?: string }) =>
+      apiClient(`/users/${id}`, { method: 'PATCH', body }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin-users'] }),
+    onError: (e: Error) => setNotice({ type: 'err', msg: e.message }),
+  });
 
   const handleAdd = () => {
-    if (!newUser.name.trim() || newUser.pin.length < 4) {
-      setNotice('Name and a 4-digit PIN are required.');
-      return;
-    }
-    setUsers((u) => [...u, { id: String(Date.now()), ...newUser }]);
-    setNewUser({ name: '', role: 'picker', pin: '' });
-    setShowAdd(false);
-    setNotice('User added. Set their PIN via POST /api/v1/auth/pin-change in the backend.');
+    if (!newUser.name.trim()) { setNotice({ type: 'err', msg: 'Name is required.' }); return; }
+    if (!/^\d{4,8}$/.test(newUser.pin)) { setNotice({ type: 'err', msg: 'PIN must be 4–8 digits.' }); return; }
+    if (newUser.pin !== newUser.confirmPin) { setNotice({ type: 'err', msg: 'PINs do not match.' }); return; }
+    createUser.mutate({ name: newUser.name, role: newUser.role, pin: newUser.pin, email: newUser.email || undefined });
   };
 
+  const handleResetPin = (id: string) => {
+    if (!/^\d{4,8}$/.test(editPin)) { setNotice({ type: 'err', msg: 'PIN must be 4–8 digits.' }); return; }
+    updateUser.mutate({ id, new_pin: editPin });
+    setEditPinId(null);
+    setEditPin('');
+    setNotice({ type: 'ok', msg: 'PIN updated.' });
+    setTimeout(() => setNotice(null), 2000);
+  };
+
+  const btnStyle = (primary: boolean): React.CSSProperties => ({
+    height: '34px', padding: '0 14px',
+    backgroundColor: primary ? 'var(--brand-primary)' : 'transparent',
+    color: primary ? '#fff' : 'var(--text-muted)',
+    border: primary ? 'none' : '1px solid var(--border)',
+    borderRadius: '6px', fontSize: '13px', fontWeight: primary ? 600 : 400,
+    cursor: 'pointer', fontFamily: 'inherit',
+  });
+
   return (
-    <div style={{ maxWidth: '700px' }}>
+    <div style={{ maxWidth: '760px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <div>
           <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700 }}>Warehouse Users</h3>
@@ -754,25 +795,22 @@ function UsersSettings() {
             PIN-based login — each user authenticates with a 4–8 digit PIN.
           </p>
         </div>
-        <button
-          onClick={() => setShowAdd(!showAdd)}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '34px', padding: '0 14px', backgroundColor: 'var(--brand-primary)', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
-        >
-          <Plus size={14} /> Add User
+        <button onClick={() => { setShowAdd(!showAdd); setNotice(null); }} style={btnStyle(true)}>
+          <Plus size={14} style={{ marginRight: '4px' }} /> Add User
         </button>
       </div>
 
       {notice && (
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '10px 14px', backgroundColor: '#fff7e6', border: '1px solid #fcd34d', borderRadius: '6px', marginBottom: '1rem', fontSize: '13px', color: '#92400e' }}>
-          <AlertCircle size={15} style={{ flexShrink: 0, marginTop: '1px' }} />
-          {notice}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '10px 14px', backgroundColor: notice.type === 'ok' ? '#e8f7f0' : '#fff7e6', border: `1px solid ${notice.type === 'ok' ? '#0e8a4f' : '#fcd34d'}`, borderRadius: '6px', marginBottom: '1rem', fontSize: '13px', color: notice.type === 'ok' ? '#0e8a4f' : '#92400e' }}>
+          {notice.type === 'err' ? <AlertCircle size={15} style={{ flexShrink: 0, marginTop: '1px' }} /> : <CheckCircle2 size={15} style={{ flexShrink: 0, marginTop: '1px' }} />}
+          {notice.msg}
         </div>
       )}
 
       {showAdd && (
-        <div style={{ ...CARD, backgroundColor: 'var(--surface-sunken)' }}>
+        <div style={{ ...CARD, backgroundColor: 'var(--surface-sunken)', marginBottom: '1rem' }}>
           <h4 style={{ margin: '0 0 0.75rem', fontSize: '14px', fontWeight: 600 }}>New User</h4>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem 1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem 1rem' }}>
             <div style={{ gridColumn: 'span 2' }}>
               <FieldGroup label="Full Name">
                 <input style={INPUT} placeholder="e.g. Ravi Kumar" value={newUser.name} onChange={(e) => setNewUser((u) => ({ ...u, name: e.target.value }))} />
@@ -783,61 +821,200 @@ function UsersSettings() {
                 {Object.keys(ROLE_BADGE).map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
             </FieldGroup>
-            <FieldGroup label="Initial PIN (4–8 digits)">
+            <FieldGroup label="Email (for PIN reset)">
+              <input style={INPUT} type="email" placeholder="ravi@example.com" value={newUser.email} onChange={(e) => setNewUser((u) => ({ ...u, email: e.target.value }))} />
+            </FieldGroup>
+            <FieldGroup label="PIN (4–8 digits)">
               <input style={{ ...INPUT, fontFamily: 'monospace' }} type="password" inputMode="numeric" maxLength={8} placeholder="••••" value={newUser.pin} onChange={(e) => setNewUser((u) => ({ ...u, pin: e.target.value.replace(/\D/g, '') }))} />
+            </FieldGroup>
+            <FieldGroup label="Confirm PIN">
+              <input style={{ ...INPUT, fontFamily: 'monospace' }} type="password" inputMode="numeric" maxLength={8} placeholder="••••" value={newUser.confirmPin} onChange={(e) => setNewUser((u) => ({ ...u, confirmPin: e.target.value.replace(/\D/g, '') }))} />
             </FieldGroup>
           </div>
           <div style={{ display: 'flex', gap: '8px', marginTop: '0.5rem' }}>
-            <button onClick={handleAdd} style={{ height: '34px', padding: '0 14px', backgroundColor: 'var(--brand-primary)', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-              Create User
+            <button onClick={handleAdd} disabled={createUser.isPending} style={btnStyle(true)}>
+              {createUser.isPending ? 'Creating…' : 'Create User'}
             </button>
-            <button onClick={() => setShowAdd(false)} style={{ height: '34px', padding: '0 14px', backgroundColor: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit' }}>
-              Cancel
-            </button>
+            <button onClick={() => setShowAdd(false)} style={btnStyle(false)}>Cancel</button>
           </div>
         </div>
       )}
 
       <div style={CARD}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid var(--border)' }}>
-              {['Name', 'Role', 'PIN', ''].map((h) => (
-                <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => {
-              const badge = ROLE_BADGE[u.role] ?? ROLE_BADGE['read_only']!;
-              return (
-                <tr key={u.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td style={{ padding: '10px 12px', fontWeight: 600 }}>{u.name}</td>
-                  <td style={{ padding: '10px 12px' }}>
-                    <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: badge.color, backgroundColor: badge.bg }}>
-                      {u.role}
-                    </span>
-                  </td>
-                  <td style={{ padding: '10px 12px', fontFamily: 'monospace', color: 'var(--text-muted)' }}>{u.pin}</td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                    <button
-                      onClick={() => setUsers((prev) => prev.filter((x) => x.id !== u.id))}
-                      style={{ padding: '4px 8px', border: '1px solid var(--border)', borderRadius: '4px', backgroundColor: 'transparent', cursor: 'pointer', color: 'var(--text-muted)' }}
-                      title="Remove user"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        {isLoading ? (
+          <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '1.5rem 0' }}>Loading users…</p>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                {['Name', 'Role', 'Email', 'Last Login', 'Status', ''].map((h) => (
+                  <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(users ?? []).map((u) => {
+                const badge = ROLE_BADGE[u.role] ?? ROLE_BADGE['read_only']!;
+                return (
+                  <tr key={u.id} style={{ borderBottom: '1px solid var(--border)', opacity: u.is_active ? 1 : 0.5 }}>
+                    <td style={{ padding: '10px 12px', fontWeight: 600 }}>{u.name}</td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: badge.color, backgroundColor: badge.bg }}>
+                        {u.role}
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 12px', fontSize: '13px', color: 'var(--text-muted)' }}>{u.email ?? '—'}</td>
+                    <td style={{ padding: '10px 12px', fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                      {u.last_login_at ? new Date(u.last_login_at).toLocaleDateString('en-IN') : 'Never'}
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: u.is_active ? '#0e8a4f' : '#c42b1c' }}>
+                        {u.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>
+                      {editPinId === u.id ? (
+                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                          <input
+                            type="password" inputMode="numeric" maxLength={8} placeholder="New PIN"
+                            value={editPin} onChange={(e) => setEditPin(e.target.value.replace(/\D/g, ''))}
+                            style={{ width: '80px', height: '28px', padding: '0 6px', fontSize: '13px', border: '1px solid var(--border)', borderRadius: '4px', fontFamily: 'monospace' }}
+                          />
+                          <button onClick={() => handleResetPin(u.id)} style={{ ...btnStyle(true), height: '28px', fontSize: '12px', padding: '0 10px' }}>Set</button>
+                          <button onClick={() => { setEditPinId(null); setEditPin(''); }} style={{ ...btnStyle(false), height: '28px', fontSize: '12px', padding: '0 8px' }}>×</button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button onClick={() => { setEditPinId(u.id); setEditPin(''); }} title="Reset PIN" style={{ padding: '4px 8px', border: '1px solid var(--border)', borderRadius: '4px', backgroundColor: 'transparent', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '11px' }}>
+                            Reset PIN
+                          </button>
+                          <button
+                            onClick={() => updateUser.mutate({ id: u.id, is_active: !u.is_active })}
+                            title={u.is_active ? 'Deactivate' : 'Activate'}
+                            style={{ padding: '4px 8px', border: '1px solid var(--border)', borderRadius: '4px', backgroundColor: 'transparent', cursor: 'pointer', color: u.is_active ? 'var(--scan-error)' : '#0e8a4f', fontSize: '11px' }}
+                          >
+                            {u.is_active ? 'Deactivate' : 'Activate'}
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── TAB: Email & Notifications ────────────────────────────────────────────────
+
+function SmtpSettings() {
+  const [cfg, setCfg] = useState<Record<string, string>>({});
+  const [loaded, setLoaded] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [testEmail, setTestEmail] = useState('');
+  const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    apiClient<Record<string, string>>('/settings').then((data) => {
+      setCfg(data);
+      setLoaded(true);
+    }).catch(() => setLoaded(true));
+  }, []);
+
+  const update = (key: string, value: string) => setCfg((c) => ({ ...c, [key]: value }));
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await apiClient('/settings', { method: 'PUT', body: cfg });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch {
+      // error shown via browser
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTestEmail = async () => {
+    if (!testEmail) return;
+    setTesting(true);
+    setTestResult(null);
+    try {
+      await apiClient('/settings/test-email', { method: 'POST', body: { to: testEmail } });
+      setTestResult({ ok: true, msg: `Test email sent to ${testEmail}` });
+    } catch (e) {
+      setTestResult({ ok: false, msg: e instanceof Error ? e.message : 'Failed to send test email' });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  if (!loaded) return <p style={{ color: 'var(--text-muted)', padding: '1rem 0' }}>Loading settings…</p>;
+
+  return (
+    <div style={{ maxWidth: '640px' }}>
+      <div style={CARD}>
+        <h3 style={{ fontSize: '15px', fontWeight: 700, margin: '0 0 1rem' }}>SMTP Configuration</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem 1rem' }}>
+          <div style={{ gridColumn: 'span 2' }}>
+            <FieldGroup label="SMTP Host">
+              <input style={INPUT} placeholder="smtp.gmail.com" value={cfg['smtp_host'] ?? ''} onChange={(e) => update('smtp_host', e.target.value)} />
+            </FieldGroup>
+          </div>
+          <FieldGroup label="Port">
+            <input style={INPUT} type="number" placeholder="587" value={cfg['smtp_port'] ?? ''} onChange={(e) => update('smtp_port', e.target.value)} />
+          </FieldGroup>
+          <FieldGroup label="Security">
+            <select style={SELECT} value={cfg['smtp_secure'] ?? 'false'} onChange={(e) => update('smtp_secure', e.target.value)}>
+              <option value="false">STARTTLS (port 587)</option>
+              <option value="true">SSL/TLS (port 465)</option>
+            </select>
+          </FieldGroup>
+          <FieldGroup label="Username / Email">
+            <input style={INPUT} type="email" placeholder="sender@fabb6.com" value={cfg['smtp_user'] ?? ''} onChange={(e) => update('smtp_user', e.target.value)} />
+          </FieldGroup>
+          <FieldGroup label="Password / App Password">
+            <input style={{ ...INPUT, fontFamily: 'monospace' }} type="password" placeholder="••••••••" value={cfg['smtp_pass'] ?? ''} onChange={(e) => update('smtp_pass', e.target.value)} />
+          </FieldGroup>
+          <div style={{ gridColumn: 'span 2' }}>
+            <FieldGroup label="From Address (optional)">
+              <input style={INPUT} placeholder="Fabb6 WMS <no-reply@fabb6.com>" value={cfg['smtp_from'] ?? ''} onChange={(e) => update('smtp_from', e.target.value)} />
+            </FieldGroup>
+          </div>
+        </div>
       </div>
 
-      <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-        PIN changes require the backend CLI or POST /api/v1/auth/pin-change with supervisor/admin role.
-      </p>
+      <div style={CARD}>
+        <h3 style={{ fontSize: '15px', fontWeight: 700, margin: '0 0 1rem' }}>Test Email</h3>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+          <div style={{ flex: 1 }}>
+            <FieldGroup label="Send test to">
+              <input style={INPUT} type="email" placeholder="ops@fabb6.com" value={testEmail} onChange={(e) => setTestEmail(e.target.value)} />
+            </FieldGroup>
+          </div>
+          <button
+            onClick={() => void handleTestEmail()}
+            disabled={testing || !testEmail}
+            style={{ height: '36px', padding: '0 16px', backgroundColor: 'var(--brand-primary)', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: testing || !testEmail ? 0.6 : 1 }}
+          >
+            {testing ? 'Sending…' : 'Send Test'}
+          </button>
+        </div>
+        {testResult && (
+          <p style={{ margin: '8px 0 0', fontSize: '13px', color: testResult.ok ? '#0e8a4f' : 'var(--scan-error)' }}>
+            {testResult.ok ? '✓ ' : '✗ '}{testResult.msg}
+          </p>
+        )}
+      </div>
+
+      <SaveButton onClick={() => void handleSave()} saved={saved && !saving} />
     </div>
   );
 }
@@ -933,13 +1110,14 @@ function PrintSettings() {
 // ── TAB definitions ───────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'warehouse',    label: 'Warehouse',    icon: Building2,  Component: WarehouseSettings },
-  { id: 'scanner',      label: 'Scanner',      icon: Scan,        Component: ScannerSettings },
-  { id: 'operations',   label: 'Operations',   icon: Cog,         Component: OperationsSettings },
-  { id: 'integrations', label: 'Integrations', icon: Plug,        Component: IntegrationSettings },
-  { id: 'users',        label: 'Users',        icon: Users,       Component: UsersSettings },
-  { id: 'print',        label: 'Print & Labels', icon: Printer,   Component: PrintSettings },
-  { id: 'data',         label: 'Data Import',  icon: Upload,      Component: StockImport },
+  { id: 'warehouse',    label: 'Warehouse',       icon: Building2,  Component: WarehouseSettings,   adminOnly: false },
+  { id: 'scanner',      label: 'Scanner',          icon: Scan,       Component: ScannerSettings,     adminOnly: false },
+  { id: 'operations',   label: 'Operations',       icon: Cog,        Component: OperationsSettings,  adminOnly: false },
+  { id: 'integrations', label: 'Integrations',     icon: Plug,       Component: IntegrationSettings, adminOnly: false },
+  { id: 'users',        label: 'Users',             icon: Users,      Component: UsersSettings,       adminOnly: false },
+  { id: 'email',        label: 'Email & SMTP',      icon: Mail,       Component: SmtpSettings,        adminOnly: true  },
+  { id: 'print',        label: 'Print & Labels',    icon: Printer,    Component: PrintSettings,       adminOnly: false },
+  { id: 'data',         label: 'Data Import',       icon: Upload,     Component: StockImport,         adminOnly: false },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
@@ -956,10 +1134,11 @@ export default function Settings() {
 
   const visibleTabs = TABS.filter((t) => {
     if (t.id === 'users' && user?.role !== 'admin' && user?.role !== 'supervisor') return false;
+    if (t.adminOnly && user?.role !== 'admin') return false;
     return true;
   });
 
-  const active = TABS.find((t) => t.id === activeTab)!;
+  const active = TABS.find((t) => t.id === activeTab) ?? TABS[0]!;
   const { Component } = active;
 
   return (

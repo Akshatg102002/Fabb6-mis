@@ -17,6 +17,8 @@ import printJobsRouter from './print-jobs.js';
 import shippingRouter from './shipping.js';
 import vendorsRouter from './vendors.js';
 import dashboardRouter from './dashboard.js';
+import settingsRouter from './settings.js';
+import usersRouter from './users.js';
 
 const router: express.Router = Router();
 
@@ -71,5 +73,11 @@ router.use('/vendors', vendorsRouter);
 
 // Dashboard analytics
 router.use('/dashboard', dashboardRouter);
+
+// Settings (SMTP, system config)
+router.use('/settings', settingsRouter);
+
+// User management
+router.use('/users', usersRouter);
 
 export default router;

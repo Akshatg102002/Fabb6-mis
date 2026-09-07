@@ -10,7 +10,7 @@ import { rateLimit } from 'express-rate-limit';
 import { pinoHttp } from 'pino-http';
 import http from 'http';
 import { logger } from './logger.js';
-import { checkDbConnection, closeDb } from './db/index.js';
+import { checkDbConnection, closeDb, pool } from './db/index.js';
 import { startJobQueue, stopJobQueue } from './jobs/index.js';
 import routes from './routes/index.js';
 
@@ -158,6 +158,36 @@ async function shutdown(signal: string): Promise<void> {
   }, SHUTDOWN_TIMEOUT).unref();
 }
 
+// ─── Startup migrations ────────────────────────────────────────────────────────
+async function runMigrations(): Promise<void> {
+  const migrations = [
+    // Users table: add email, last_login_at, OTP columns
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255) UNIQUE`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS email_otp_hash TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS email_otp_expires_at TIMESTAMPTZ`,
+    // System settings table for SMTP and other config
+    `CREATE TABLE IF NOT EXISTS system_settings (
+      key VARCHAR(200) PRIMARY KEY,
+      value TEXT NOT NULL DEFAULT '',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_by UUID REFERENCES users(id)
+    )`,
+    // Rename default admin user if still using the old name
+    `UPDATE users SET name = 'Fabb6_Admin', email = COALESCE(email, 'admin@fabb6.com')
+     WHERE role = 'admin' AND name = 'Admin'`,
+  ];
+
+  for (const sql of migrations) {
+    try {
+      await pool.query(sql);
+    } catch (err) {
+      logger.warn({ err, sql: sql.slice(0, 80) }, 'Migration step skipped (may already exist)');
+    }
+  }
+  logger.info('Database migrations applied');
+}
+
 // ─── Startup ──────────────────────────────────────────────────────────────────
 async function start(): Promise<void> {
   // Validate DB connection before starting
@@ -167,6 +197,13 @@ async function start(): Promise<void> {
   } catch (err) {
     logger.fatal({ err }, 'Cannot connect to database, exiting');
     process.exit(1);
+  }
+
+  // Apply lightweight schema migrations
+  try {
+    await runMigrations();
+  } catch (err) {
+    logger.error({ err }, 'Migration error (continuing)');
   }
 
   // Start job queue

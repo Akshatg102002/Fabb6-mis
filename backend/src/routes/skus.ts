@@ -15,6 +15,7 @@ router.get('/', requireAuth, validate({ query: skuQuerySchema }), async (req, re
     page: number;
     limit: number;
     search?: string;
+    code?: string;
     brand_id?: string;
     category_id?: string;
     abc_class?: 'A' | 'B' | 'C';
@@ -22,7 +23,8 @@ router.get('/', requireAuth, validate({ query: skuQuerySchema }), async (req, re
   };
 
   const conditions = [];
-  if (q.search) conditions.push(ilike(skus.name, `%${q.search}%`));
+  if (q.code) conditions.push(eq(skus.code, q.code));
+  else if (q.search) conditions.push(ilike(skus.name, `%${q.search}%`));
   if (q.brand_id) conditions.push(eq(skus.brand_id, q.brand_id));
   if (q.category_id) conditions.push(eq(skus.category_id, q.category_id));
   if (q.abc_class) conditions.push(eq(skus.abc_class, q.abc_class));
