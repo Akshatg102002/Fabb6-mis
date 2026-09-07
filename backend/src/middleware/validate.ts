@@ -28,7 +28,15 @@ export function validate(targets: ValidationTargets) {
         errors['query'] = formatZodError(result.error);
         hasErrors = true;
       } else {
-        req.query = result.data as Record<string, string>;
+        // Express 5 defines req.query as a getter-only on the prototype.
+        // Shadow it at the instance level so downstream handlers see the
+        // coerced/parsed values without needing to touch req.query setter.
+        Object.defineProperty(req, 'query', {
+          value: result.data as Record<string, string>,
+          writable: true,
+          configurable: true,
+          enumerable: true,
+        });
       }
     }
 

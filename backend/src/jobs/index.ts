@@ -59,6 +59,12 @@ export async function startJobQueue(): Promise<PgBoss> {
     },
   );
 
+  // Create queues before scheduling (pg-boss requires queue row in pgboss.queue table first)
+  await boss.createQueue(JOB_NAMES.SHOPIFY_SYNC);
+  await boss.createQueue(JOB_NAMES.EXPIRY_ALERTS);
+  await boss.createQueue(JOB_NAMES.REORDER_CALC);
+  await boss.createQueue(JOB_NAMES.IDEMPOTENCY_CLEANUP);
+
   // Schedule recurring jobs
   await boss.schedule(JOB_NAMES.SHOPIFY_SYNC, '*/30 * * * *', {}, { singletonKey: 'shopify-sync' });
   await boss.schedule(JOB_NAMES.EXPIRY_ALERTS, '0 7 * * *', {}, { singletonKey: 'expiry-alerts' });
