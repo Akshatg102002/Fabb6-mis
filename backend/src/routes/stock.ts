@@ -582,4 +582,57 @@ router.post(
   },
 );
 
+// GET /stock/availability — three-tier stock per SKU/site
+router.get(
+  '/availability',
+  requireAuth,
+  requireRoles('supervisor', 'admin', 'read_only'),
+  validate({
+    query: z.object({
+      site_id: z.string().uuid().optional(),
+      sku_id: z.string().uuid().optional(),
+    }),
+  }),
+  async (req, res) => {
+    const q = req.query as unknown as { site_id?: string; sku_id?: string };
+
+    const whereClauses: string[] = [];
+    const params: string[] = [];
+
+    if (q.site_id) {
+      params.push(q.site_id);
+      whereClauses.push(`site_id = $${params.length}`);
+    }
+    if (q.sku_id) {
+      params.push(q.sku_id);
+      whereClauses.push(`sku_id = $${params.length}`);
+    }
+
+    const where = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT
+           sa.sku_id,
+           sa.site_id,
+           s.code  AS sku_code,
+           s.name  AS sku_name,
+           sa.physical_stock,
+           sa.committed_stock,
+           sa.available_to_sell,
+           sa.damaged_stock
+         FROM stock_availability sa
+         JOIN skus s ON s.id = sa.sku_id
+         ${where}
+         ORDER BY s.code`,
+        params,
+      );
+      res.json({ data: result.rows, total: result.rowCount });
+    } finally {
+      client.release();
+    }
+  },
+);
+
 export default router;

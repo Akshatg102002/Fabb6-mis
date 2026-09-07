@@ -6,6 +6,7 @@ import {
   timestamp,
   pgEnum,
   integer,
+  boolean,
 } from 'drizzle-orm/pg-core';
 import { skus } from './catalogue.js';
 import { batches } from './inventory.js';
@@ -16,6 +17,7 @@ export const returnTypeEnum = pgEnum('return_type', ['customer_return', 'rto']);
 export const returnStatusEnum = pgEnum('return_status', [
   'pending',
   'received',
+  'rto_received',
   'inspected',
   'completed',
   'cancelled',
@@ -54,6 +56,9 @@ export const returnLines = pgTable('return_lines', {
   inspected_at: timestamp('inspected_at', { withTimezone: true }),
   notes: text('notes'),
   line_number: integer('line_number').notNull(),
+  product_match: boolean('product_match').notNull().default(true),
+  damage_status: boolean('damage_status').notNull().default(false),
+  remarks: text('remarks'),
 });
 
 export type Return = typeof returns.$inferSelect;

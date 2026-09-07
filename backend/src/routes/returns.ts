@@ -3,7 +3,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { db } from '../db/index.js';
 import { pool } from '../db/index.js';
-import { returns, returnLines } from '../db/schema/index.js';
+import { returns, returnLines, locations } from '../db/schema/index.js';
 import { requireAuth, requireRoles } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { idempotency } from '../middleware/idempotency.js';
@@ -167,6 +167,166 @@ router.post(
     }
 
     res.status(201).json(line);
+  },
+);
+
+// POST /returns/:id/rto-received — mark an RTO return as physically received
+router.post(
+  '/:id/rto-received',
+  requireAuth,
+  requireRoles('returns', 'inward', 'supervisor', 'admin'),
+  validate({ params: z.object({ id: z.string().uuid() }) }),
+  async (req, res) => {
+    const returnId = req.params['id'] as string;
+    const ret = await db.query.returns.findFirst({ where: eq(returns.id, returnId) });
+    if (!ret) { res.status(404).json({ error: 'Return not found' }); return; }
+    if (ret.type !== 'rto') { res.status(409).json({ error: 'Only RTO returns can use this status' }); return; }
+    if (ret.status !== 'pending' && ret.status !== 'received') {
+      res.status(409).json({ error: `Cannot transition from ${ret.status} to rto_received` });
+      return;
+    }
+    const [updated] = await db
+      .update(returns)
+      .set({ status: 'rto_received', updated_at: new Date() })
+      .where(eq(returns.id, returnId))
+      .returning();
+    res.json(updated);
+  },
+);
+
+// POST /returns/:id/lines/:lineId/qc — QC gate for RTO lines
+router.post(
+  '/:id/lines/:lineId/qc',
+  requireAuth,
+  requireRoles('returns', 'supervisor', 'admin'),
+  validate({
+    params: z.object({ id: z.string().uuid(), lineId: z.string().uuid() }),
+    body: z.object({
+      qc_passed: z.boolean(),
+      sellable_location_id: z.string().uuid().optional(),
+      quarantine_location_id: z.string().uuid().optional(),
+      product_match: z.boolean().optional(),
+      remarks: z.string().max(2000).optional(),
+    }),
+  }),
+  async (req, res) => {
+    const returnId = req.params['id'] as string;
+    const lineId = req.params['lineId'] as string;
+    const body = req.body as {
+      qc_passed: boolean;
+      sellable_location_id?: string;
+      quarantine_location_id?: string;
+      product_match?: boolean;
+      remarks?: string;
+    };
+
+    const ret = await db.query.returns.findFirst({ where: eq(returns.id, returnId) });
+    if (!ret) { res.status(404).json({ error: 'Return not found' }); return; }
+    if (ret.status === 'completed' || ret.status === 'cancelled') {
+      res.status(409).json({ error: 'Return is already completed or cancelled' });
+      return;
+    }
+
+    const [line] = await db.select().from(returnLines).where(
+      and(eq(returnLines.id, lineId), eq(returnLines.return_id, returnId)),
+    );
+    if (!line) { res.status(404).json({ error: 'Return line not found' }); return; }
+
+    const now = new Date();
+    const idempKey = `qc-${returnId}-${lineId}-${body.qc_passed ? 'pass' : 'fail'}`;
+
+    if (body.qc_passed) {
+      // Resolve sellable location: prefer explicit param, else first non-quarantine bin in same site
+      let targetLocationId = body.sellable_location_id;
+      if (!targetLocationId) {
+        const siteLocs = await db
+          .select({ id: locations.id })
+          .from(locations)
+          .where(eq(locations.type, 'bin'))
+          .limit(1);
+        if (!siteLocs[0]) {
+          res.status(422).json({ error: 'No sellable bin location found; pass sellable_location_id' });
+          return;
+        }
+        targetLocationId = siteLocs[0].id;
+      }
+
+      await writeStockMovement({
+        idempotencyKey: idempKey,
+        skuId: line.sku_id,
+        batchId: line.batch_id ?? null,
+        toLocationId: targetLocationId,
+        quantity: line.qty,
+        movementType: 'rto_receipt',
+        referenceType: 'return',
+        referenceId: returnId,
+        userId: req.auth!.userId,
+        deviceId: req.auth!.deviceId,
+        notes: body.remarks ?? 'QC passed — restocked to sellable bin',
+      });
+
+      await db.update(returnLines).set({
+        qc_grade: 'A',
+        disposition: 'restock',
+        product_match: body.product_match ?? true,
+        damage_status: false,
+        remarks: body.remarks ?? null,
+        inspected_by: req.auth!.userId,
+        inspected_at: now,
+      }).where(eq(returnLines.id, lineId));
+
+    } else {
+      // QC failed → move to quarantine
+      let quarLocId = body.quarantine_location_id;
+      if (!quarLocId) {
+        const qLocs = await db
+          .select({ id: locations.id })
+          .from(locations)
+          .where(eq(locations.type, 'quarantine'))
+          .limit(1);
+        if (!qLocs[0]) {
+          res.status(422).json({ error: 'No quarantine location found; pass quarantine_location_id' });
+          return;
+        }
+        quarLocId = qLocs[0].id;
+      }
+
+      await writeStockMovement({
+        idempotencyKey: idempKey,
+        skuId: line.sku_id,
+        batchId: line.batch_id ?? null,
+        toLocationId: quarLocId,
+        quantity: line.qty,
+        movementType: 'quarantine',
+        referenceType: 'return',
+        referenceId: returnId,
+        userId: req.auth!.userId,
+        deviceId: req.auth!.deviceId,
+        notes: body.remarks ?? 'QC failed — quarantined',
+      });
+
+      await db.update(returnLines).set({
+        qc_grade: 'damaged',
+        disposition: 'writeoff',
+        product_match: body.product_match ?? false,
+        damage_status: true,
+        remarks: body.remarks ?? null,
+        inspected_by: req.auth!.userId,
+        inspected_at: now,
+      }).where(eq(returnLines.id, lineId));
+    }
+
+    // Advance return status to inspected if all lines are now graded
+    const ungraded = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(returnLines)
+      .where(and(eq(returnLines.return_id, returnId), sql`qc_grade IS NULL`));
+    if (Number(ungraded[0]?.count ?? 0) === 0) {
+      await db.update(returns).set({ status: 'inspected', updated_at: now }).where(eq(returns.id, returnId));
+    }
+
+    const [updatedLine] = await db.select().from(returnLines).where(eq(returnLines.id, lineId));
+    res.json(updatedLine);
   },
 );
 

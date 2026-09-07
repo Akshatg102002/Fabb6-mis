@@ -95,12 +95,12 @@ export async function fetchShopifyInventory(): Promise<
   try {
     const skuCodes = itemsData.inventory_items.map((i) => i.sku).filter(Boolean);
 
+    // Use available_to_sell (physical - committed) so Shopify never oversells
     const localStock = await client.query<{ code: string; id: string; qty: number }>(
-      `SELECT s.code, s.id, COALESCE(SUM(soh.quantity), 0) as qty
+      `SELECT s.code, s.id, COALESCE(sa.available_to_sell, 0) AS qty
        FROM skus s
-       LEFT JOIN stock_on_hand soh ON soh.sku_id = s.id
-       WHERE s.code = ANY($1::text[])
-       GROUP BY s.id, s.code`,
+       LEFT JOIN stock_availability sa ON sa.sku_id = s.id
+       WHERE s.code = ANY($1::text[])`,
       [skuCodes],
     );
 
