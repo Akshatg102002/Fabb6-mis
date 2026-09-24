@@ -6,6 +6,21 @@ import App from './App';
 const root = document.getElementById('root');
 if (!root) throw new Error('Root element #root not found in index.html');
 
+// Add this block at the top of main.tsx, before createRoot(...)
+async function enableMocking() {
+  if (import.meta.env.VITE_MOCK !== 'true') return;
+  const { worker } = await import('./mocks/browser');
+  return worker.start({ onUnhandledRequest: 'bypass' });
+}
+
+enableMocking().then(() => {
+  createRoot(root!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+});
+
 createRoot(root).render(
   <StrictMode>
     <App />
