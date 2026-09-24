@@ -197,7 +197,12 @@ export const handlers = [
     await delay(FAKE_DELAY);
     const url = new URL(request.url);
     const status = searchParam(url, 'status');
-    const filtered = status ? GRNS.filter(g => g.status === status || (status === 'open' && g.status === 'in_progress')) : GRNS;
+    const filtered = status
+      ? GRNS.filter(g =>
+          (g.status as string) === status ||
+          (status === 'open' && (g.status as string) === 'in_progress')
+        )
+      : GRNS;
     return HttpResponse.json(filtered);
   }),
 
