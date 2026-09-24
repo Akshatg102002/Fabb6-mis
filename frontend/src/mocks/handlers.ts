@@ -51,15 +51,15 @@ function numParam(url: URL, key: string, fallback: number) {
 export const handlers = [
   http.post(`${BASE}/auth/login`, async ({ request }) => {
     await delay(FAKE_DELAY);
-    const body = await request.json() as { username?: string; password?: string };
-    // Accept any login for prototype
+    const body = await request.json() as { username?: string; password?: string; pin?: string };
+    // Accept any credentials for prototype/demo
     return HttpResponse.json({
       token: 'mock-jwt-token-fabb6',
       user: {
         id: 'usr-001',
-        name: body.username ?? 'Parag',
+        name: body.username ?? 'Demo Admin',
         role: 'admin',
-        siteId: 'site-001',
+        site_id: 'site-001',
       },
     });
   }),
