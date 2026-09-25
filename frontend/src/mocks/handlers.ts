@@ -85,7 +85,12 @@ export const handlers = [
     const filtered = search
       ? VENDORS.filter(v => v.name.toLowerCase().includes(search))
       : VENDORS;
-    return HttpResponse.json({ data: filtered, total: filtered.length });
+    return HttpResponse.json(filtered);
+  }),
+
+  http.get(`${BASE}/vendors/next-code`, async () => {
+    await delay(FAKE_DELAY);
+    return HttpResponse.json({ code: `VND-${String(VENDORS.length + 1).padStart(3, '0')}` });
   }),
 
   http.get(`${BASE}/vendors/:id`, async ({ params }) => {
@@ -393,7 +398,37 @@ export const handlers = [
     const url = new URL(request.url);
     const status = searchParam(url, 'status');
     const filtered = status ? RETURNS.filter(r => status.split(',').includes(r.status)) : RETURNS;
-    return HttpResponse.json(filtered);
+    // Map to the RecentReturn shape expected by ReturnInward.tsx
+    const mapped = filtered.map(r => ({
+      id: r.id,
+      return_number: r.reference,
+      type: 'customer_return' as const,
+      status: r.status,
+      courier_awb: null as string | null,
+      order_ref: r.orderRef,
+      created_at: r.receivedAt ?? new Date().toISOString(),
+    }));
+    return HttpResponse.json({ data: mapped });
+  }),
+
+  http.get(`${BASE}/returns/awb/:awb`, async ({ params }) => {
+    await delay(FAKE_DELAY);
+    // Return a mock return order for any AWB scan
+    const awb = decodeURIComponent(params.awb as string);
+    const ret = RETURNS[0];
+    if (!ret) return new HttpResponse(null, { status: 404 });
+    return HttpResponse.json({
+      awb,
+      orderRef: ret.orderRef,
+      items: ret.lines.map(l => ({
+        sku: l.sku,
+        name: l.skuName,
+        barcode: l.barcode,
+        qty: l.expectedQty,
+        graded: false,
+        grade: null,
+      })),
+    });
   }),
 
   http.get(`${BASE}/returns/:id`, async ({ params }) => {
@@ -406,6 +441,11 @@ export const handlers = [
   http.post(`${BASE}/returns/receive`, async () => {
     await delay(FAKE_DELAY);
     return HttpResponse.json({ message: 'Return received' });
+  }),
+
+  http.post(`${BASE}/returns/complete`, async () => {
+    await delay(FAKE_DELAY);
+    return HttpResponse.json({ message: 'Return completed' });
   }),
 
   // ── Cycle Counting ─────────────────────────────────────────────────────
