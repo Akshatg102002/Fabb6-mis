@@ -51,15 +51,15 @@ function numParam(url: URL, key: string, fallback: number) {
 export const handlers = [
   http.post(`${BASE}/auth/login`, async ({ request }) => {
     await delay(FAKE_DELAY);
-    const body = await request.json() as { username?: string; password?: string };
-    // Accept any login for prototype
+    const body = await request.json() as { username?: string; password?: string; pin?: string };
+    // Accept any credentials for prototype/demo
     return HttpResponse.json({
       token: 'mock-jwt-token-fabb6',
       user: {
         id: 'usr-001',
-        name: body.username ?? 'Parag',
+        name: body.username ?? 'Demo Admin',
         role: 'admin',
-        siteId: 'site-001',
+        site_id: 'site-001',
       },
     });
   }),
@@ -85,7 +85,12 @@ export const handlers = [
     const filtered = search
       ? VENDORS.filter(v => v.name.toLowerCase().includes(search))
       : VENDORS;
-    return HttpResponse.json({ data: filtered, total: filtered.length });
+    return HttpResponse.json(filtered);
+  }),
+
+  http.get(`${BASE}/vendors/next-code`, async () => {
+    await delay(FAKE_DELAY);
+    return HttpResponse.json({ code: `VND-${String(VENDORS.length + 1).padStart(3, '0')}` });
   }),
 
   http.get(`${BASE}/vendors/:id`, async ({ params }) => {
@@ -197,7 +202,12 @@ export const handlers = [
     await delay(FAKE_DELAY);
     const url = new URL(request.url);
     const status = searchParam(url, 'status');
-    const filtered = status ? GRNS.filter(g => g.status === status || (status === 'open' && g.status === 'in_progress')) : GRNS;
+    const filtered = status
+      ? GRNS.filter(g =>
+          (g.status as string) === status ||
+          (status === 'open' && (g.status as string) === 'in_progress')
+        )
+      : GRNS;
     return HttpResponse.json(filtered);
   }),
 
@@ -388,7 +398,37 @@ export const handlers = [
     const url = new URL(request.url);
     const status = searchParam(url, 'status');
     const filtered = status ? RETURNS.filter(r => status.split(',').includes(r.status)) : RETURNS;
-    return HttpResponse.json(filtered);
+    // Map to the RecentReturn shape expected by ReturnInward.tsx
+    const mapped = filtered.map(r => ({
+      id: r.id,
+      return_number: r.reference,
+      type: 'customer_return' as const,
+      status: r.status,
+      courier_awb: null as string | null,
+      order_ref: r.orderRef,
+      created_at: r.receivedAt ?? new Date().toISOString(),
+    }));
+    return HttpResponse.json({ data: mapped });
+  }),
+
+  http.get(`${BASE}/returns/awb/:awb`, async ({ params }) => {
+    await delay(FAKE_DELAY);
+    // Return a mock return order for any AWB scan
+    const awb = decodeURIComponent(params.awb as string);
+    const ret = RETURNS[0];
+    if (!ret) return new HttpResponse(null, { status: 404 });
+    return HttpResponse.json({
+      awb,
+      orderRef: ret.orderRef,
+      items: ret.lines.map(l => ({
+        sku: l.sku,
+        name: l.skuName,
+        barcode: l.barcode,
+        qty: l.expectedQty,
+        graded: false,
+        grade: null,
+      })),
+    });
   }),
 
   http.get(`${BASE}/returns/:id`, async ({ params }) => {
@@ -401,6 +441,11 @@ export const handlers = [
   http.post(`${BASE}/returns/receive`, async () => {
     await delay(FAKE_DELAY);
     return HttpResponse.json({ message: 'Return received' });
+  }),
+
+  http.post(`${BASE}/returns/complete`, async () => {
+    await delay(FAKE_DELAY);
+    return HttpResponse.json({ message: 'Return completed' });
   }),
 
   // ── Cycle Counting ─────────────────────────────────────────────────────
